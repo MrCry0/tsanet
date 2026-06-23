@@ -116,6 +116,7 @@ class HubServer:
             peer = str(connection._sock.getpeername())
             transport = self._config.network.transport
             self._sessions.admit(connection, peer=peer, transport=transport)
+            self._auto_select_device()
         except SessionBusy as exc:
             connection.send(Response(id=0, status=Status.ERROR, error=str(exc)))
             connection.close()
@@ -148,6 +149,13 @@ class HubServer:
                 logger.debug("ignoring non-request message: %s", type(msg).__name__)
 
     # -- helpers -----------------------------------------------------------
+
+    def _auto_select_device(self) -> None:
+        """Select the only device if exactly one is present and free."""
+        devices = self._registry.list()
+        free = [d for d in devices if not d.busy]
+        if len(free) == 1:
+            self._sessions.select_device(free[0].device_id)
 
     @staticmethod
     def _describe(endpoint: Any) -> str:
