@@ -163,7 +163,20 @@ app.add_typer(sweep_app, name="sweep", help="Sweep control")
 @sweep_app.command(name="get")
 def sweep_get() -> None:
     """Print current sweep settings."""
-    typer.echo(_call("sweep", "get"))
+    raw = _call("sweep", "get")
+    parts = str(raw).split()
+    if len(parts) < 2:
+        typer.echo(raw)
+        return
+    start = int(parts[0])
+    stop = int(parts[1])
+    points = int(parts[2]) if len(parts) > 2 else None
+    center = (start + stop) // 2
+    typer.echo(f"Start:      {_fmt_hz(start)}")
+    typer.echo(f"End:        {_fmt_hz(stop)}")
+    typer.echo(f"Center:     {_fmt_hz(center)}")
+    if points is not None:
+        typer.echo(f"Points:     {points}")
 
 
 @sweep_app.command(name="status")
