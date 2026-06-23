@@ -28,16 +28,18 @@ device, transport, and application layers are being built out in phases.
 
 ## Development
 
+This project uses [uv](https://docs.astral.sh/uv/):
+
 ```sh
-pip install -e ".[all,dev]"   # core + hub/cli/gui extras + dev tools
-ruff check .                   # lint
-ruff format --check .          # formatting
-pytest                         # tests
+uv sync --all-extras    # create .venv with all extras + dev tools
+uv run ruff check .      # lint
+uv run ruff format .     # format
+uv run pytest            # tests
 ```
 
 The `all` extra pulls in the hub (`pyserial`), CLI (`typer`), and GUI
-(`PySide6`, `pyqtgraph`) dependencies. A headless hub box can install just the
-hub extra: `pip install -e ".[hub]"`.
+(`PySide6`, `pyqtgraph`) dependencies. A headless hub box can sync just the
+hub extra: `uv sync --extra hub`.
 
 ## License
 
