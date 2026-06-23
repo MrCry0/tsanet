@@ -129,6 +129,11 @@ class HubServer:
         except Exception:
             logger.exception("unhandled error in request loop")
         finally:
+            # Clear the session if this connection still owns it (it may
+            # have been evicted by a force-takeover from another connection).
+            current = self._sessions.current
+            if current is not None and current.connection is connection:
+                self._sessions.disconnect()
             connection.close()
 
     def _request_loop(self, connection: Connection) -> None:
