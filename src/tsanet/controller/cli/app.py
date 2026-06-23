@@ -85,7 +85,7 @@ def _setup(
 # -- devices ---------------------------------------------------------------
 
 
-devices_app = typer.Typer()
+devices_app = typer.Typer(no_args_is_help=True)
 app.add_typer(devices_app, name="devices", help="Device discovery and selection")
 
 
@@ -115,7 +115,7 @@ def devices_select(
 # -- device ----------------------------------------------------------------
 
 
-device_app = typer.Typer()
+device_app = typer.Typer(no_args_is_help=True)
 app.add_typer(device_app, name="device", help="Device identification and control")
 
 
@@ -156,7 +156,7 @@ def device_reset(
 # -- sweep -----------------------------------------------------------------
 
 
-sweep_app = typer.Typer()
+sweep_app = typer.Typer(no_args_is_help=True)
 app.add_typer(sweep_app, name="sweep", help="Sweep control")
 
 
@@ -242,7 +242,7 @@ def sweep_resume() -> None:
 # -- marker ----------------------------------------------------------------
 
 
-marker_app = typer.Typer()
+marker_app = typer.Typer(no_args_is_help=True)
 app.add_typer(marker_app, name="marker", help="Marker control")
 
 
@@ -344,7 +344,7 @@ def marker_track_off(
 # -- trace -----------------------------------------------------------------
 
 
-trace_app = typer.Typer()
+trace_app = typer.Typer(no_args_is_help=True)
 app.add_typer(trace_app, name="trace", help="Trace control and data")
 
 
@@ -500,7 +500,7 @@ def trace_stats(
 # -- signal ----------------------------------------------------------------
 
 
-signal_app = typer.Typer()
+signal_app = typer.Typer(no_args_is_help=True)
 app.add_typer(signal_app, name="signal", help="Signal processing")
 
 
@@ -537,7 +537,7 @@ def signal_lna(
 # -- menu ------------------------------------------------------------------
 
 
-menu_app = typer.Typer()
+menu_app = typer.Typer(no_args_is_help=True)
 app.add_typer(menu_app, name="menu", help="Menu navigation")
 
 
@@ -555,7 +555,7 @@ def menu_trigger(
 # -- preset ----------------------------------------------------------------
 
 
-preset_app = typer.Typer()
+preset_app = typer.Typer(no_args_is_help=True)
 app.add_typer(preset_app, name="preset", help="Preset save and load")
 
 
@@ -580,7 +580,7 @@ def preset_save(
 # -- capture ---------------------------------------------------------------
 
 
-capture_app = typer.Typer()
+capture_app = typer.Typer(no_args_is_help=True)
 app.add_typer(capture_app, name="capture", help="Screenshot capture")
 
 
@@ -600,7 +600,7 @@ def capture_save(
 # -- raw -------------------------------------------------------------------
 
 
-raw_app = typer.Typer()
+raw_app = typer.Typer(no_args_is_help=True)
 app.add_typer(raw_app, name="raw", help="Raw passthrough commands")
 
 
@@ -615,7 +615,7 @@ def raw_execute(
 # -- session ---------------------------------------------------------------
 
 
-session_app = typer.Typer()
+session_app = typer.Typer(no_args_is_help=True)
 app.add_typer(session_app, name="session", help="Session management")
 
 
