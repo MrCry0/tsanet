@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Any
 
-from tsanet.common.errors import SessionBusy
+from tsanet.common.errors import ConnectionClosed, SessionBusy
 from tsanet.device.discovery import list_serial_ports, open_serial_port
 from tsanet.hub.config import HubConfig
 from tsanet.hub.dispatcher import Dispatcher
@@ -124,6 +124,8 @@ class HubServer:
 
         try:
             self._request_loop(connection)
+        except ConnectionClosed:
+            logger.debug("controller disconnected")
         except Exception:
             logger.exception("unhandled error in request loop")
         finally:
