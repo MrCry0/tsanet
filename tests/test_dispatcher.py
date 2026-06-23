@@ -154,27 +154,40 @@ def test_session_disconnect():
     data = _ok(_dispatch(dispatcher, conn, "session", "disconnect"))
     assert data == {"active": False}
     assert sessions.current is None
-    assert conn.closed is True
 
 
-def test_session_force_takeover_evicts_other():
+def test_session_force_takeover_enables_next_admission():
     dispatcher, _, sessions, conn = _make_dispatcher()
 
     other_conn = DummyConnection()
     sessions.admit(other_conn, peer="other", force=True)
+    # conn was evicted and closed by the force admit above.
+    assert conn.closed is True
 
+    # force_takeover sets the allow_takeover flag via the (now-closed)
+    # connection's session.  The next connection will be admitted without
+    # needing force.
     data = _ok(_dispatch(dispatcher, conn, "session", "force_takeover"))
     assert data == {"active": True}
+
+    # Now a new connection can take over without force.
+    new_conn = DummyConnection()
+    sessions.admit(new_conn, peer="new")
+    # The incumbent (other_conn) was evicted and closed.
     assert other_conn.closed is True
-    assert sessions.current.connection is conn
+    assert sessions.current.connection is new_conn
 
 
-def test_session_force_takeover_noop_when_already_current():
+def test_session_force_takeover_sets_allow_flag():
     dispatcher, _, sessions, conn = _make_dispatcher()
     data = _ok(_dispatch(dispatcher, conn, "session", "force_takeover"))
     assert data == {"active": True}
-    assert not conn.closed
     assert sessions.current.connection is conn
+
+    # After force_takeover, a new connection is admitted without force.
+    new_conn = DummyConnection()
+    sessions.admit(new_conn, peer="taker")
+    assert sessions.current.connection is new_conn
 
 
 def test_session_unknown_op():

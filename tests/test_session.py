@@ -47,14 +47,16 @@ def test_force_takeover_evicts_incumbent():
     assert manager.current.connection is second
 
 
-def test_disconnect_closes_and_clears():
+def test_disconnect_clears_session():
     manager = SessionManager()
     conn = DummyConnection()
     manager.admit(conn)
 
     manager.disconnect()
 
-    assert conn.closed is True
+    # disconnect clears the session without closing the connection;
+    # the caller is responsible for closing.
+    assert conn.closed is False
     assert manager.current is None
     assert manager.status() == {"active": False}
 

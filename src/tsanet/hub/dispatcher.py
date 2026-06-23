@@ -69,9 +69,11 @@ class Dispatcher:
         if domain == "session":
             return self._handle_session(op, args, connection)
 
-        tx = self._resolve_device()
-
+        # Validate the domain before resolving the device so that unknown
+        # domains produce a clear DispatchError instead of a misleading
+        # "no device selected" error.
         if domain == "capture":
+            tx = self._resolve_device()
             return self._handle_capture(tx, op, args)
 
         if domain == "trace" and op in ("subscribe", "unsubscribe"):
@@ -82,6 +84,8 @@ class Dispatcher:
         handler = _HANDLERS.get(domain)
         if handler is None:
             raise DispatchError(f"unknown domain: {domain!r}")
+
+        tx = self._resolve_device()
         return handler(tx, op, args)
 
     def _resolve_device(self) -> TinySA:
@@ -126,9 +130,7 @@ class Dispatcher:
             self._sessions.disconnect()
             return {"active": False}
         if op == "force_takeover":
-            current = self._sessions.current
-            if current is not None and current.connection is not connection:
-                self._sessions.admit(connection, force=True)
+            self._sessions.allow_takeover()
             return {"active": True}
         raise DispatchError(f"unknown session op: {op!r}")
 
