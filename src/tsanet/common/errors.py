@@ -29,3 +29,15 @@ class ConnectionClosed(TransportError):
 
 class FrameError(TransportError):
     """A framed message could not be encoded or decoded."""
+
+
+class SessionError(TsanetError):
+    """A controller session could not be established or used."""
+
+
+class SessionBusy(SessionError):
+    """A controller session is already active and takeover was not requested."""
+
+
+class DispatchError(TsanetError):
+    """An RPC request could not be routed or its arguments were invalid."""
