@@ -7,6 +7,10 @@ directly against the registry and session manager.
 
 from __future__ import annotations
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from tsanet.common.errors import DispatchError, SessionError
 from tsanet.device.commands import capture as cmd_capture
 from tsanet.device.commands import device as cmd_device
@@ -27,13 +31,22 @@ from tsanet.hub.session import SessionManager
 from tsanet.protocol.messages import Request, Response, Status
 from tsanet.protocol.transport import Connection
 
+if TYPE_CHECKING:
+    from tsanet.hub.subscriptions import SubscriptionManager
+
 
 class Dispatcher:
     """Routes incoming RPC requests to device commands and hub services."""
 
-    def __init__(self, registry: DeviceRegistry, sessions: SessionManager) -> None:
+    def __init__(
+        self,
+        registry: DeviceRegistry,
+        sessions: SessionManager,
+        subscriptions: SubscriptionManager | None = None,
+    ) -> None:
         self._registry = registry
         self._sessions = sessions
+        self._subscriptions = subscriptions
 
     # -- public API --------------------------------------------------------
 
@@ -60,6 +73,11 @@ class Dispatcher:
 
         if domain == "capture":
             return self._handle_capture(tx, op, args)
+
+        if domain == "trace" and op in ("subscribe", "unsubscribe"):
+            if self._subscriptions is None:
+                raise DispatchError("subscriptions not configured on this hub")
+            return self._handle_trace_subscription(op, args)
 
         handler = _HANDLERS.get(domain)
         if handler is None:
@@ -127,6 +145,16 @@ class Dispatcher:
             rgba = decode_rgb565(raw_fb, width, height)
             return encode_png(rgba, width, height)
         raise DispatchError(f"unknown capture op: {op!r}")
+
+    # -- trace subscription (instance method — delegates to Manager) -----
+
+    def _handle_trace_subscription(self, op: str, args: dict):
+        assert self._subscriptions is not None
+        if op == "subscribe":
+            return self._subscriptions.subscribe(args["ids"], args.get("interval"))
+        if op == "unsubscribe":
+            return self._subscriptions.unsubscribe()
+        raise DispatchError(f"unknown trace subscription op: {op!r}")
 
 
 # -- per-domain handler functions ------------------------------------------
