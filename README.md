@@ -1,8 +1,8 @@
-# rc-tinysa
+# tsanet
 
-Network control suite for tinySA Ultra spectrum analyzers.
+Network control suite for tinySA spectrum analyzers.
 
-`tsanet` lets one or more tinySA Ultra units, physically attached via USB to
+`tsanet` lets one or more tinySA units, physically attached via USB to
 one machine, be discovered, indexed, and remotely controlled from another
 machine (or the same machine) over a network.
 
@@ -10,7 +10,7 @@ machine (or the same machine) over a network.
 
 The suite is one Python package (`tsanet`) exposing three console scripts:
 
-- `tsanet-hub` - runs on the machine with tinySA Ultra units plugged in. Owns
+- `tsanet-hub` - runs on the machine with tinySA units plugged in. Owns
   the USB serial connections, discovers and indexes connected devices, and
   executes commands received over the network.
 - `tsanet-ctl` - command-line controller that issues commands to a hub.
