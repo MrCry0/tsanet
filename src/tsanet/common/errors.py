@@ -17,3 +17,15 @@ class DeviceTimeout(DeviceError):
 
 class ProtocolError(DeviceError):
     """The device response did not match the expected wire format."""
+
+
+class TransportError(TsanetError):
+    """A network transport or wire-protocol failure."""
+
+
+class ConnectionClosed(TransportError):
+    """The peer closed the connection."""
+
+
+class FrameError(TransportError):
+    """A framed message could not be encoded or decoded."""
