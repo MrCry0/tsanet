@@ -619,9 +619,24 @@ session_app = typer.Typer(no_args_is_help=True)
 app.add_typer(session_app, name="session", help="Session management")
 
 
+@session_app.command(name="list")
+def session_list() -> None:
+    """List active sessions on the hub."""
+    sessions = _call("session", "list")
+    if not sessions:
+        typer.echo("no active sessions")
+        return
+    for s in sessions:
+        transport = s.get("transport", "?")
+        peer = s.get("peer", "?")
+        device = s.get("selected_device") or "-"
+        uptime = s.get("uptime_seconds", 0)
+        typer.echo(f"{transport:<6s} {peer:<24s} device={device:<16s} uptime={uptime:.0f}s")
+
+
 @session_app.command(name="status")
 def session_status() -> None:
-    """Print session status."""
+    """Print the current session status."""
     s = _call("session", "status")
     if s["active"]:
         typer.echo(f"active  peer={s['peer']}  device={s.get('selected_device')}  uptime={s['uptime_seconds']}s")

@@ -126,6 +126,8 @@ class Dispatcher:
     def _handle_session(self, op: str, args: dict, connection: Connection):
         if op == "status":
             return self._sessions.status()
+        if op == "list":
+            return self._sessions.list_sessions()
         if op == "disconnect":
             self._sessions.disconnect()
             return {"active": False}

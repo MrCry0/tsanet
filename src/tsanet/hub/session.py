@@ -21,6 +21,7 @@ from tsanet.protocol.transport import Connection
 class Session:
     connection: Connection
     peer: str = ""
+    transport: str = ""
     selected_device_id: str | None = None
     started_at: float = field(default_factory=time.time)
 
@@ -33,7 +34,9 @@ class SessionManager:
         self._lock = threading.Lock()
         self._allow_takeover = False
 
-    def admit(self, connection: Connection, *, peer: str = "", force: bool = False) -> Session:
+    def admit(
+        self, connection: Connection, *, peer: str = "", transport: str = "", force: bool = False
+    ) -> Session:
         """Admit a controller, evicting the incumbent if ``force`` is set.
 
         Raises :class:`SessionBusy` if a session is active and ``force`` is not
@@ -45,7 +48,7 @@ class SessionManager:
                     raise SessionBusy("a controller session is already active")
                 self._evict_locked()
                 self._allow_takeover = False
-            session = Session(connection=connection, peer=peer)
+            session = Session(connection=connection, peer=peer, transport=transport)
             self._current = session
             return session
 
@@ -80,6 +83,21 @@ class SessionManager:
                 "selected_device": self._current.selected_device_id,
                 "uptime_seconds": round(time.time() - self._current.started_at, 3),
             }
+
+    def list_sessions(self) -> list[dict[str, Any]]:
+        """Return a list of active sessions with peer and transport info."""
+        with self._lock:
+            if self._current is None:
+                return []
+            s = self._current
+            return [
+                {
+                    "peer": s.peer,
+                    "transport": s.transport,
+                    "selected_device": s.selected_device_id,
+                    "uptime_seconds": round(time.time() - s.started_at, 3),
+                }
+            ]
 
     def allow_takeover(self) -> None:
         """Allow the next admission to evict the current session.

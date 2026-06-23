@@ -113,7 +113,9 @@ class HubServer:
     def _serve(self, connection: Connection) -> None:
         """Handle a single controller connection."""
         try:
-            self._sessions.admit(connection, peer=str(connection._sock.getpeername()))
+            peer = str(connection._sock.getpeername())
+            transport = self._config.network.transport
+            self._sessions.admit(connection, peer=peer, transport=transport)
         except SessionBusy as exc:
             connection.send(Response(id=0, status=Status.ERROR, error=str(exc)))
             connection.close()
