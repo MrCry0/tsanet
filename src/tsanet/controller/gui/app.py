@@ -18,7 +18,8 @@ from tsanet.controller.gui.main_window import MainWindow
 
 def main() -> None:
     app = QApplication(sys.argv)
-    _ = MainWindow()
+    window = MainWindow()
+    window.show()
     app.exec()
 
 
