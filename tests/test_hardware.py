@@ -156,8 +156,8 @@ class TestHardware:
             c.call("trace", "enable", id=1)
             data = c.call("trace", "fetch_data", ids=[1])
             assert "frequencies" in data
-            assert 1 in data["traces"]
-            assert len(data["frequencies"]) == len(data["traces"][1])
+            assert "1" in data["traces"]
+            assert len(data["frequencies"]) == len(data["traces"]["1"])
             c.close()
         finally:
             h.stop()

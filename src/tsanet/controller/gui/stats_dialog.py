@@ -68,7 +68,11 @@ class StatsDialog(QDialog):
 
         unit = self._unit.currentText()
         result = compute_stats(
-            data["frequencies"], data["traces"][tid], unit, start_hz, stop_hz,
+            data["frequencies"],
+            data["traces"][str(tid)],
+            unit,
+            start_hz,
+            stop_hz,
         )
 
         n = sum(1 for f in data["frequencies"] if start_hz <= f <= stop_hz)

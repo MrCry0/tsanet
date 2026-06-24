@@ -40,7 +40,7 @@ class LiveGraphPanel(QWidget):
         self._line_checks: list[QCheckBox] = []
         defaults = ["minh", "aver4", "maxh"]
         for i in range(3):
-            chk = QCheckBox(f"Line {i+1}")
+            chk = QCheckBox(f"Line {i + 1}")
             chk.setChecked(True)
             calc = QComboBox()
             calc.addItems(sorted(VALID_CALC))
@@ -94,10 +94,7 @@ class LiveGraphPanel(QWidget):
         main_layout.addWidget(self._plot)
 
     def _start(self):
-        ids = [
-            i + 1 for i in range(3)
-            if self._line_checks[i].isChecked()
-        ]
+        ids = [i + 1 for i in range(3) if self._line_checks[i].isChecked()]
         if not ids:
             return
 
@@ -160,6 +157,6 @@ class LiveGraphPanel(QWidget):
         for i in range(3):
             if self._curves[i] is not None:
                 tid = i + 1
-                if tid in traces:
-                    self._curves[i].setData(self._frequencies, traces[tid])
+                if str(tid) in traces:
+                    self._curves[i].setData(self._frequencies, traces[str(tid)])
                 curve_idx += 1

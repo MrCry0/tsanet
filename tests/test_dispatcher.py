@@ -377,7 +377,9 @@ def test_marker_enable_delta_and_tracking():
 
 def test_marker_get_and_get_all():
     dispatcher, registry, _, conn = _make_dispatcher()
-    tx = FakeSerial([b"marker 1\r\n1 433000000\r\nch> ", b"marker\r\n1 433000000\r\n2 868000000\r\nch> "])
+    tx = FakeSerial(
+        [b"marker 1\r\n1 433000000\r\nch> ", b"marker\r\n1 433000000\r\n2 868000000\r\nch> "]
+    )
     _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
 
     assert _ok(_dispatch(dispatcher, conn, "marker", "get", id=1)) == "1 433000000"
@@ -430,7 +432,7 @@ def test_trace_fetch_data():
 
     data = _ok(_dispatch(dispatcher, conn, "trace", "fetch_data", ids=[1, 2]))
     assert data["frequencies"] == [100000000, 200000000]
-    assert data["traces"] == {1: [-50.5, -51.2], 2: [-60.0, -61.5]}
+    assert data["traces"] == {"1": [-50.5, -51.2], "2": [-60.0, -61.5]}
 
 
 def test_trace_get_frequencies():

@@ -51,7 +51,11 @@ class HubServer:
 
         Call :meth:`stop` from a signal handler to initiate shutdown.
         """
-        logger.info("starting hub: mode=%s transport=%s", self._config.network.mode, self._config.network.transport)
+        logger.info(
+            "starting hub: mode=%s transport=%s",
+            self._config.network.mode,
+            self._config.network.transport,
+        )
         self._poller.start()
         logger.info("device poller started (interval=%.1fs)", self._config.poll_interval)
 

@@ -53,10 +53,13 @@ class CaptureViewer(QWidget):
             self._png = self._rpc.call("capture", "fetch")
             pix = QPixmap()
             pix.loadFromData(self._png)
-            self._label.setPixmap(pix.scaled(
-                self._label.size(), Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            ))
+            self._label.setPixmap(
+                pix.scaled(
+                    self._label.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
         except Exception as exc:
             self._label.setText(f"Error: {exc}")
 

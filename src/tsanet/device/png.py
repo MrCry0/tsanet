@@ -14,7 +14,12 @@ _SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def _chunk(tag: bytes, data: bytes) -> bytes:
-    return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    return (
+        struct.pack(">I", len(data))
+        + tag
+        + data
+        + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    )
 
 
 def encode_png(rgba: bytes, width: int, height: int) -> bytes:

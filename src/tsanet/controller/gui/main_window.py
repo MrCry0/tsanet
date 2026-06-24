@@ -227,7 +227,9 @@ class MainWindow(QMainWindow):
         off_btn = QPushButton("Off")
         off_btn.clicked.connect(lambda: self._trace_cmd("disable"))
         calc_btn = QPushButton("Set Calc")
-        calc_btn.clicked.connect(lambda: self._trace_cmd("enable_calc", calc=self._trace_calc.text() or "off"))
+        calc_btn.clicked.connect(
+            lambda: self._trace_cmd("enable_calc", calc=self._trace_calc.text() or "off")
+        )
         # actually need to not send empty calc
         btn.addWidget(on_btn)
         btn.addWidget(off_btn)

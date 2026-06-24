@@ -265,9 +265,9 @@ def _trace(tx: TinySA, op: str, args: dict):
     if op == "fetch_data":
         freq_text = cmd_trace.get_frequencies(tx)
         frequencies = parse_frequencies(freq_text)
-        traces: dict[int, list[float]] = {}
+        traces: dict[str, list[float]] = {}
         for tid in args["ids"]:
-            traces[tid] = parse_trace_values(cmd_trace.fetch_value(tx, tid))
+            traces[str(tid)] = parse_trace_values(cmd_trace.fetch_value(tx, tid))
         return {"frequencies": frequencies, "traces": traces}
     if op == "enable":
         return cmd_trace.enable(tx, args["id"])

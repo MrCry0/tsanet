@@ -167,19 +167,21 @@ def test_event_has_trace_values():
 
     assert len(events) >= 2
     update = events[1]
-    assert 1 in update.data["traces"]
-    assert 2 in update.data["traces"]
-    assert update.data["traces"][1] == [-50.5, -51.2]
-    assert update.data["traces"][2] == [-60.0, -61.5]
+    assert "1" in update.data["traces"]
+    assert "2" in update.data["traces"]
+    assert update.data["traces"]["1"] == [-50.5, -51.2]
+    assert update.data["traces"]["2"] == [-60.0, -61.5]
 
 
 def test_frequencies_only_resent_when_changed():
     mgr, registry, _, conn = _setup()
     tx = FakeSerial(
         [
-            FREQS_RESP,                        # initial frequencies
-            TRACE1_RESP, FREQS_RESP,           # cycle 1: same freqs
-            TRACE1_RESP, FREQS_RESP,           # cycle 2: same freqs
+            FREQS_RESP,  # initial frequencies
+            TRACE1_RESP,
+            FREQS_RESP,  # cycle 1: same freqs
+            TRACE1_RESP,
+            FREQS_RESP,  # cycle 2: same freqs
             TRACE1_RESP,
             b"frequencies\r\n300000000\r\nch> ",  # cycle 3: changed
         ]
@@ -209,8 +211,10 @@ def test_subscribe_with_interval_paces():
     tx = FakeSerial(
         [
             FREQS_RESP,
-            TRACE1_RESP, FREQS_RESP,  # cycle 1
-            TRACE1_RESP, FREQS_RESP,  # cycle 2
+            TRACE1_RESP,
+            FREQS_RESP,  # cycle 1
+            TRACE1_RESP,
+            FREQS_RESP,  # cycle 2
         ]
     )
     _replace(registry, "/dev/ultra", TinySA(tx, attempts=1))
@@ -284,6 +288,7 @@ def test_dispatcher_subscribe_without_manager_returns_error():
 
 
 # -- helpers ---------------------------------------------------------------
+
 
 def _replace(registry, device_id, tx):
     registry.get(device_id).transport = tx

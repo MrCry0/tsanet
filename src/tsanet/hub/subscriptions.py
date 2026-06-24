@@ -129,10 +129,10 @@ class Subscription:
                 cycle_start = time.monotonic()
 
                 # Fetch trace values for each requested id.
-                traces: dict[int, list[float]] = {}
+                traces: dict[str, list[float]] = {}
                 for tid in self._ids:
                     try:
-                        traces[tid] = parse_trace_values(cmd_trace.fetch_value(self._tx, tid))
+                        traces[str(tid)] = parse_trace_values(cmd_trace.fetch_value(self._tx, tid))
                     except Exception:
                         # A single bad trace read shouldn't kill the loop;
                         # skip this cycle and try again next time.

@@ -229,7 +229,9 @@ def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency")]) -> None:
 def sweep_range(
     start: Annotated[str, typer.Argument(help="Start frequency")],
     stop: Annotated[str, typer.Argument(help="Stop frequency")],
-    points: Annotated[Optional[int], typer.Option("--points", "-p", help="Number of points")] = None,
+    points: Annotated[
+        Optional[int], typer.Option("--points", "-p", help="Number of points")
+    ] = None,
 ) -> None:
     """Set sweep start, stop, and optionally point count."""
     s = parse_frequency(start)
@@ -269,7 +271,9 @@ app.add_typer(marker_app, name="marker", help="Marker control")
 
 @marker_app.command(name="get")
 def marker_get(
-    marker_id: Annotated[Optional[int], typer.Option("--id", "-m", help="Marker ID (default: all)")] = None,
+    marker_id: Annotated[
+        Optional[int], typer.Option("--id", "-m", help="Marker ID (default: all)")
+    ] = None,
 ) -> None:
     """Print marker data."""
     if marker_id is not None:
@@ -371,7 +375,9 @@ app.add_typer(trace_app, name="trace", help="Trace control and data")
 
 @trace_app.command(name="get")
 def trace_get(
-    trace_id: Annotated[Optional[int], typer.Option("--id", "-t", help="Trace ID (default: all)")] = None,
+    trace_id: Annotated[
+        Optional[int], typer.Option("--id", "-t", help="Trace ID (default: all)")
+    ] = None,
 ) -> None:
     """Print trace settings."""
     if trace_id is not None:
@@ -401,7 +407,9 @@ def trace_off(
 @trace_app.command(name="calc")
 def trace_calc(
     trace_id: Annotated[int, typer.Argument(help="Trace ID")],
-    calc_type: Annotated[str, typer.Argument(help=f"Calculation type: {', '.join(sorted(VALID_CALC))}")],
+    calc_type: Annotated[
+        str, typer.Argument(help=f"Calculation type: {', '.join(sorted(VALID_CALC))}")
+    ],
 ) -> None:
     """Enable a calculation (minh, maxh, maxd, aver4, aver16, aver, quasi)."""
     _call("trace", "enable_calc", id=trace_id, calc=calc_type)
@@ -453,7 +461,9 @@ def trace_scale(
 
 @trace_app.command(name="save")
 def trace_save(
-    trace_ids: Annotated[str, typer.Option("--trace", "-t", help="Comma-separated trace IDs (e.g. 1,2)")],
+    trace_ids: Annotated[
+        str, typer.Option("--trace", "-t", help="Comma-separated trace IDs (e.g. 1,2)")
+    ],
     output: Annotated[
         Optional[str], typer.Option("--output", "-o", help="Output file path")
     ] = None,
@@ -472,7 +482,8 @@ def trace_save(
     if len(ids) == 1:
         writer.writerow(["trace", "point", "frequency", "value"])
         tid = ids[0]
-        for i, (f, v) in enumerate(zip(freqs, traces[tid])):
+        tkey = str(tid)
+        for i, (f, v) in enumerate(zip(freqs, traces[tkey])):
             writer.writerow([tid, i, f, v])
     else:
         headers = ["point", "frequency"] + [f"value_t{t}" for t in ids]
@@ -480,7 +491,7 @@ def trace_save(
         for i, f in enumerate(freqs):
             row: list[object] = [i, f]
             for tid in ids:
-                row.append(traces[tid][i])
+                row.append(traces[str(tid)][i])
             writer.writerow(row)
 
     csv_text = buf.getvalue()
@@ -504,14 +515,12 @@ def trace_stats(
 
     data = _call("trace", "fetch_data", ids=[trace_id])
     freqs = data["frequencies"]
-    vals = data["traces"][trace_id]
+    vals = data["traces"][str(trace_id)]
 
     result = compute_stats(freqs, vals, unit, start_hz, stop_hz)
     n = sum(1 for f in freqs if start_hz <= f <= stop_hz)
 
-    typer.echo(
-        f"Trace {trace_id} stats ({start} - {stop}, {n} points), unit: {unit}"
-    )
+    typer.echo(f"Trace {trace_id} stats ({start} - {stop}, {n} points), unit: {unit}")
     typer.echo(f"  Average power : {result.average:.1f} {unit}")
     typer.echo(f"  Median        : {result.median:.1f} {unit}")
     typer.echo(f"  Min           : {result.minimum:.1f} {unit}  @ {_fmt_hz(result.min_freq)}")
@@ -660,7 +669,9 @@ def session_status() -> None:
     """Print the current session status."""
     s = _call("session", "status")
     if s["active"]:
-        typer.echo(f"active  peer={s['peer']}  device={s.get('selected_device')}  uptime={s['uptime_seconds']}s")
+        typer.echo(
+            f"active  peer={s['peer']}  device={s.get('selected_device')}  uptime={s['uptime_seconds']}s"
+        )
     else:
         typer.echo("inactive")
 

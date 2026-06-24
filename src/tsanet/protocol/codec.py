@@ -40,7 +40,7 @@ def decode_length(header: bytes) -> int:
 def decode_payload(payload: bytes) -> Message:
     """Decode a MessagePack payload into a message."""
     try:
-        obj = msgpack.unpackb(payload, raw=False)
+        obj = msgpack.unpackb(payload, raw=False, strict_map_key=False)
     except (ValueError, msgpack.UnpackException) as error:
         raise FrameError(f"invalid MessagePack payload: {error}") from error
     return message_from_dict(obj)
