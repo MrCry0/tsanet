@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QGroupBox, QLabel, QListWidget, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import (
+    QGroupBox,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+)
 
 from tsanet.controller.rpc_client import RpcClient
 
@@ -38,8 +45,9 @@ class DevicePanel(QGroupBox):
         for d in devices:
             status = "[BUSY]" if d["busy"] else "[free]"
             label = f"{d['device_id']}  {d['model']}  {status}"
-            item = self._list.addItem(label)
+            item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, d["device_id"])
+            self._list.addItem(item)
 
     def _on_select(self, current, _previous):
         if current is None:
