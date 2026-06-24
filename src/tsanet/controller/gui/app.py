@@ -1,6 +1,19 @@
+"""``tsanet-gui`` entry point (brief 10, 11.7)."""
+
+from __future__ import annotations
+
 import sys
+
+from PySide6.QtWidgets import QApplication
+
+from tsanet.controller.gui.main_window import MainWindow
 
 
 def main() -> None:
-    print("tsanet-gui: not yet implemented")
-    sys.exit(1)
+    app = QApplication(sys.argv)
+    _ = MainWindow()
+    app.exec()
+
+
+if __name__ == "__main__":
+    main()

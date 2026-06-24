@@ -1,22 +1,28 @@
 """RPC client for communicating with a tsanet hub (brief 2, 9, 11.6).
 
 Manages the network connection lifecycle (dial or listen) and wraps
-request/response exchanges into a simple call API.
+request/response exchanges into a simple call API.  When a subscription
+is active the hub pushes ``Event`` messages on the same connection;
+callers can register a callback via ``on_event()`` to receive them.
 """
 
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 
 from tsanet.common.errors import TransportError
 from tsanet.controller.config import ControllerConfig
-from tsanet.protocol.messages import Request, Response, Status
+from tsanet.protocol.messages import Event, Request, Response, Status
 from tsanet.protocol.security import NullSecurity
 from tsanet.protocol.transport import Connection, Listener, dial, listen
 
 
 class RpcError(TransportError):
     """The hub returned an error response for the RPC call."""
+
+
+EventCallback = Callable[[Event], None]
 
 
 class RpcClient:
@@ -28,6 +34,7 @@ class RpcClient:
         self._listener: Listener | None = None
         self._lock = threading.Lock()
         self._next_id = 0
+        self._event_cb: EventCallback | None = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -52,6 +59,12 @@ class RpcClient:
                 self._listener.close()
                 self._listener = None
 
+    # -- events ------------------------------------------------------------
+
+    def on_event(self, cb: EventCallback) -> None:
+        """Register a callback for unsolicited ``Event`` messages."""
+        self._event_cb = cb
+
     # -- RPC ---------------------------------------------------------------
 
     def call(self, domain: str, op: str, **args: object) -> object:
@@ -66,9 +79,16 @@ class RpcClient:
             req_id = self._next_id
             self._next_id += 1
             conn.send(Request(id=req_id, domain=domain, op=op, args=args))
-            resp = conn.recv()
-            if not isinstance(resp, Response):
-                raise TransportError(f"unexpected message type: {type(resp).__name__}")
-            if resp.status == Status.ERROR:
-                raise RpcError(resp.error or "unknown error")
-            return resp.data
+            while True:
+                msg = conn.recv()
+                if isinstance(msg, Response):
+                    if msg.id != req_id:
+                        continue
+                    if msg.status == Status.ERROR:
+                        raise RpcError(msg.error or "unknown error")
+                    return msg.data
+                if isinstance(msg, Event):
+                    if self._event_cb is not None:
+                        self._event_cb(msg)
+                    continue
+                raise TransportError(f"unexpected message type: {type(msg).__name__}")
