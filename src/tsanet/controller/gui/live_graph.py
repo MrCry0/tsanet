@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pyqtgraph as pg
+from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -21,12 +22,21 @@ from tsanet.device.model import VALID_CALC
 from tsanet.protocol.messages import Event
 
 
+class _EventBridge(QObject):
+    """Receives events from the reader thread and forwards to the GUI thread."""
+
+    arrived = Signal(dict)
+
+
 class LiveGraphPanel(QWidget):
     def __init__(self, rpc: RpcClient, parent=None):
         super().__init__(parent)
         self._rpc = rpc
         self._running = False
         self._frequencies: list[int] = []
+
+        self._bridge = _EventBridge()
+        self._bridge.arrived.connect(self._on_event)
 
         self._plot = pg.PlotWidget()
         self._plot.setLabel("bottom", "Frequency", "Hz")
@@ -40,7 +50,7 @@ class LiveGraphPanel(QWidget):
         self._line_checks: list[QCheckBox] = []
         defaults = ["minh", "aver4", "maxh"]
         for i in range(3):
-            chk = QCheckBox(f"Line {i + 1}")
+            chk = QCheckBox(f"Line {i+1}")
             chk.setChecked(True)
             calc = QComboBox()
             calc.addItems(sorted(VALID_CALC))
@@ -94,7 +104,10 @@ class LiveGraphPanel(QWidget):
         main_layout.addWidget(self._plot)
 
     def _start(self):
-        ids = [i + 1 for i in range(3) if self._line_checks[i].isChecked()]
+        ids = [
+            i + 1 for i in range(3)
+            if self._line_checks[i].isChecked()
+        ]
         if not ids:
             return
 
@@ -128,7 +141,7 @@ class LiveGraphPanel(QWidget):
         self._running = True
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
-        self._rpc.on_event(self._on_event)
+        self._rpc.on_event(self._on_reader_event)
 
     def _stop(self):
         self._running = False
@@ -143,20 +156,22 @@ class LiveGraphPanel(QWidget):
             self._line_checks[i].setEnabled(True)
             self._line_calcs[i].setEnabled(True)
 
-    def _on_event(self, event: Event):
-        if not self._running or event.domain != "trace" or event.op != "update":
-            return
-        data = event.data
-        if not isinstance(data, dict):
+    def _on_reader_event(self, event: Event):
+        """Called from the reader thread — bridge to GUI thread."""
+        if event.domain == "trace" and event.op == "update":
+            self._bridge.arrived.emit(event.data if isinstance(event.data, dict) else {})
+
+    @Slot(dict)
+    def _on_event(self, data: dict):
+        if not self._running:
             return
         freqs = data.get("frequencies")
         if freqs:
             self._frequencies = freqs
         traces = data.get("traces", {})
-        curve_idx = 0
         for i in range(3):
-            if self._curves[i] is not None:
-                tid = i + 1
-                if str(tid) in traces:
-                    self._curves[i].setData(self._frequencies, traces[str(tid)])
-                curve_idx += 1
+            curve = self._curves[i]
+            if curve is not None:
+                tid = str(i + 1)
+                if tid in traces:
+                    curve.setData(self._frequencies, traces[tid])
