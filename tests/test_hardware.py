@@ -12,7 +12,6 @@ By default the first available serial port is used.  Override with::
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 
