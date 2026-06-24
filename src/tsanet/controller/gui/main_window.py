@@ -96,6 +96,8 @@ class MainWindow(QMainWindow):
             central.removeTab(4)
             central.insertTab(4, self._live_graph, "Live Graph")
 
+            self._refresh_sweep_status()
+
     def _on_tab_changed(self, index):
         if index == self._SWEEP_TAB and self._rpc is not None:
             self._refresh_sweep_status()
