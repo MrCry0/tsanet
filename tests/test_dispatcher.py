@@ -281,6 +281,60 @@ def test_sweep_pause_resume():
     assert tx.written == [b"pause\r", b"resume\r"]
 
 
+def test_sweep_auto_lna_for_center_above_threshold():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"lna on\r\nch> ", b"sweep center 1785000000\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_center", hz=1785000000))
+    assert tx.written == [b"lna on\r", b"sweep center 1785000000\r"]
+
+
+def test_sweep_auto_lna_for_start_above_threshold():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"lna on\r\nch> ", b"sweep start 900000000\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_start", hz=900000000))
+    assert tx.written == [b"lna on\r", b"sweep start 900000000\r"]
+
+
+def test_sweep_no_auto_lna_below_threshold():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"sweep center 433000000\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_center", hz=433000000))
+    assert tx.written == [b"sweep center 433000000\r"]
+
+
+def test_sweep_auto_lna_for_cw_above_threshold():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"lna on\r\nch> ", b"sweep cw 2400000000\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_cw", hz=2400000000))
+    assert tx.written == [b"lna on\r", b"sweep cw 2400000000\r"]
+
+
+def test_sweep_auto_lna_for_start_stop_max_above_threshold():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"lna on\r\nch> ", b"sweep 100000000 900000000\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_start_stop", start=100000000, stop=900000000))
+    assert tx.written == [b"lna on\r", b"sweep 100000000 900000000\r"]
+
+
+def test_sweep_no_auto_lna_for_span():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"sweep span 1000000\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_span", hz=1000000))
+    assert tx.written == [b"sweep span 1000000\r"]
+
+
 # ======================================================================
 # marker domain
 # ======================================================================
