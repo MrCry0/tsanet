@@ -204,6 +204,14 @@ class MainWindow(QMainWindow):
                 t = int(parts[1])
                 c = (s + t) // 2
                 p = int(parts[2]) if len(parts) > 2 else None
+                # Update the input fields to reflect actual device state.
+                self._sw_start.setText(str(s))
+                self._sw_stop.setText(str(t))
+                self._sw_center.setText(str(c))
+                self._sw_span.setText(str(t - s))
+                if p is not None:
+                    self._sw_points.setText(str(p))
+                # Status bar text.
                 text = f"Start: {_fmt(s)}  Stop: {_fmt(t)}  Center: {_fmt(c)}"
                 if p:
                     text += f"  Points: {p}"
