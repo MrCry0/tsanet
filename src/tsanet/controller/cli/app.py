@@ -684,11 +684,23 @@ def session_force_takeover() -> None:
 
 def _fmt_hz(hz: int) -> str:
     if hz >= 1_000_000_000:
-        return f"{hz / 1_000_000_000:.2f} GHz"
+        whole = hz // 1_000_000_000
+        frac = hz % 1_000_000_000
+        if frac == 0:
+            return f"{whole} GHz"
+        return f"{whole}.{frac:09d}".rstrip("0") + " GHz"
     if hz >= 1_000_000:
-        return f"{hz / 1_000_000:.2f} MHz"
+        whole = hz // 1_000_000
+        frac = hz % 1_000_000
+        if frac == 0:
+            return f"{whole} MHz"
+        return f"{whole}.{frac:06d}".rstrip("0") + " MHz"
     if hz >= 1_000:
-        return f"{hz / 1_000:.2f} kHz"
+        whole = hz // 1_000
+        frac = hz % 1_000
+        if frac == 0:
+            return f"{whole} kHz"
+        return f"{whole}.{frac:03d}".rstrip("0") + " kHz"
     return f"{hz} Hz"
 
 
