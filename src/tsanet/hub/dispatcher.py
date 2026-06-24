@@ -186,6 +186,16 @@ def _device(tx: TinySA, op: str, args: dict):
     raise DispatchError(f"unknown device op: {op!r}")
 
 
+# Frequency above which the Ultra model needs LNA enabled (high-band mode).
+_LNA_THRESHOLD_HZ = 800_000_000
+
+
+def _ensure_lna_for_hz(tx: TinySA, hz: int) -> None:
+    """Enable LNA if *hz* exceeds the low-band threshold."""
+    if hz > _LNA_THRESHOLD_HZ:
+        cmd_signal.enable_lna(tx)
+
+
 def _sweep(tx: TinySA, op: str, args: dict):
     if op == "get":
         return cmd_sweep.get(tx)
@@ -194,16 +204,21 @@ def _sweep(tx: TinySA, op: str, args: dict):
     if op == "set_mode":
         return cmd_sweep.set_mode(tx, args["mode"])
     if op == "set_start":
+        _ensure_lna_for_hz(tx, args["hz"])
         return cmd_sweep.set_start(tx, args["hz"])
     if op == "set_stop":
+        _ensure_lna_for_hz(tx, args["hz"])
         return cmd_sweep.set_stop(tx, args["hz"])
     if op == "set_center":
+        _ensure_lna_for_hz(tx, args["hz"])
         return cmd_sweep.set_center(tx, args["hz"])
     if op == "set_span":
         return cmd_sweep.set_span(tx, args["hz"])
     if op == "set_cw":
+        _ensure_lna_for_hz(tx, args["hz"])
         return cmd_sweep.set_cw(tx, args["hz"])
     if op == "set_start_stop":
+        _ensure_lna_for_hz(tx, max(args["start"], args.get("stop", 0)))
         return cmd_sweep.set_start_stop(tx, args["start"], args["stop"], args.get("points"))
     if op == "set_time":
         return cmd_sweep.set_time(tx, args["us"])

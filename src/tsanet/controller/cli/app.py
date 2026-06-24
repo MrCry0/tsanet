@@ -188,36 +188,41 @@ def sweep_status() -> None:
 @sweep_app.command(name="start")
 def sweep_start(hz: Annotated[str, typer.Argument(help="Start frequency (e.g. 100mhz)")]) -> None:
     """Set sweep start frequency."""
-    _call("sweep", "set_start", hz=parse_frequency(hz))
-    typer.echo(f"start = {hz}")
+    freq = parse_frequency(hz)
+    _call("sweep", "set_start", hz=freq)
+    typer.echo(f"start = {_fmt_hz(freq)}")
 
 
 @sweep_app.command(name="stop")
 def sweep_stop(hz: Annotated[str, typer.Argument(help="Stop frequency")]) -> None:
     """Set sweep stop frequency."""
-    _call("sweep", "set_stop", hz=parse_frequency(hz))
-    typer.echo(f"stop = {hz}")
+    freq = parse_frequency(hz)
+    _call("sweep", "set_stop", hz=freq)
+    typer.echo(f"stop = {_fmt_hz(freq)}")
 
 
 @sweep_app.command(name="center")
 def sweep_center(hz: Annotated[str, typer.Argument(help="Center frequency")]) -> None:
     """Set sweep center frequency."""
-    _call("sweep", "set_center", hz=parse_frequency(hz))
-    typer.echo(f"center = {hz}")
+    freq = parse_frequency(hz)
+    _call("sweep", "set_center", hz=freq)
+    typer.echo(f"center = {_fmt_hz(freq)}")
 
 
 @sweep_app.command(name="span")
 def sweep_span(hz: Annotated[str, typer.Argument(help="Span")]) -> None:
     """Set sweep span."""
-    _call("sweep", "set_span", hz=parse_frequency(hz))
-    typer.echo(f"span = {hz}")
+    freq = parse_frequency(hz)
+    _call("sweep", "set_span", hz=freq)
+    typer.echo(f"span = {_fmt_hz(freq)}")
 
 
 @sweep_app.command(name="cw")
 def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency")]) -> None:
     """Set sweep to continuous-wave mode at a frequency."""
-    _call("sweep", "set_cw", hz=parse_frequency(hz))
-    typer.echo(f"cw = {hz}")
+    freq = parse_frequency(hz)
+    _call("sweep", "set_cw", hz=freq)
+    typer.echo(f"cw = {_fmt_hz(freq)}")
 
 
 @sweep_app.command(name="range")
@@ -227,8 +232,11 @@ def sweep_range(
     points: Annotated[Optional[int], typer.Option("--points", "-p", help="Number of points")] = None,
 ) -> None:
     """Set sweep start, stop, and optionally point count."""
-    _call("sweep", "set_start_stop", start=parse_frequency(start), stop=parse_frequency(stop), points=points)
-    typer.echo(f"range = {start} - {stop}" + (f" ({points} pts)" if points else ""))
+    s = parse_frequency(start)
+    t = parse_frequency(stop)
+    _call("sweep", "set_start_stop", start=s, stop=t, points=points)
+    extra = f" ({points} pts)" if points else ""
+    typer.echo(f"range = {_fmt_hz(s)} - {_fmt_hz(t)}{extra}")
 
 
 @sweep_app.command(name="time")
