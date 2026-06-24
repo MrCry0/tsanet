@@ -235,7 +235,8 @@ class MainWindow(QMainWindow):
         btn.addWidget(off_btn)
         btn.addWidget(calc_btn)
 
-        layout.addLayout(form)
+        group.setLayout(form)
+        layout.addWidget(group)
         layout.addLayout(btn)
 
         # stats button
@@ -244,7 +245,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(stats_btn)
         layout.addStretch()
 
-        group.setLayout(form)
         return w
 
     def _trace_cmd(self, op, **extra):
