@@ -37,11 +37,15 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._status)
 
         tabs = QTabWidget()
+        tabs.currentChanged.connect(self._on_tab_changed)
+        self._tabs = tabs
         self._device_panel = QWidget()  # placeholder
         self._sweep_panel = self._build_sweep_panel()
         self._trace_panel = self._build_trace_panel()
         self._capture_viewer = QWidget()  # placeholder
         self._live_graph = QWidget()  # placeholder
+
+        self._SWEEP_TAB = 1
 
         tabs.addTab(self._device_panel, "Devices")
         tabs.addTab(self._sweep_panel, "Sweep")
@@ -92,6 +96,10 @@ class MainWindow(QMainWindow):
             central.removeTab(4)
             central.insertTab(4, self._live_graph, "Live Graph")
 
+    def _on_tab_changed(self, index):
+        if index == self._SWEEP_TAB and self._rpc is not None:
+            self._refresh_sweep_status()
+
     # -- sweep panel -------------------------------------------------------
 
     def _build_sweep_panel(self):
@@ -135,12 +143,16 @@ class MainWindow(QMainWindow):
         btn.addWidget(span_btn)
         btn.addWidget(cw_btn)
 
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.clicked.connect(lambda: self._refresh_sweep_status())
+
         # Status
         self._sweep_status = QLabel("")
 
         layout.addWidget(range_group)
         layout.addWidget(ctrl)
         layout.addLayout(btn)
+        layout.addWidget(refresh_btn)
         layout.addWidget(self._sweep_status)
         layout.addStretch()
         return w
