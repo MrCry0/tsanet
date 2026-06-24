@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtWidgets import QApplication
+try:
+    from PySide6.QtWidgets import QApplication
+except ImportError:
+    sys.exit(
+        "PySide6 is not installed.\n"
+        "Install it with:  uv run --extra gui tsanet-gui\n"
+        "or:               pip install tsanet[gui]"
+    )
 
 from tsanet.controller.gui.main_window import MainWindow
 
