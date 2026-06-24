@@ -180,7 +180,21 @@ uv run --extra cli --extra hub --extra gui pytest  # tests (including GUI import
 uv run --extra cli --extra hub pytest --ignore=tests/test_hardware.py  # skip PySide6
 ```
 
-Run hardware tests (requires an attached tinySA):
+### Running from source
+
+The repo includes executable wrapper scripts at the root that run the three
+programs directly without installing the package:
+
+```sh
+python tsanet-hub.py --port 7777
+python tsanet-ctl.py --address 127.0.0.1 --port 7777 devices list
+python tsanet-gui.py
+```
+
+These auto-detect the project's `.venv` and re-exec under it, so they work
+without activating the virtualenv.
+
+### Hardware tests
 
 ```sh
 uv run --extra cli --extra hub pytest tests/test_hardware.py --run-hardware
