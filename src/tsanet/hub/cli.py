@@ -41,7 +41,7 @@ def _resolve_log_level(
     log_level: str,
 ) -> int:
     """Resolve effective log level from flags.
-    Priority: --debug > --verbose > --log-level > default (WARNING).
+    Priority: --debug > --verbose > --log-level > default (INFO).
     """
     if debug:
         return logging.DEBUG
@@ -50,7 +50,7 @@ def _resolve_log_level(
     try:
         return getattr(logging, log_level.upper())
     except AttributeError:
-        return logging.WARNING
+        return logging.INFO
 
 
 @app.command()
@@ -93,7 +93,7 @@ def run(
             "--log-level",
             help="Log level: debug, info, warning, error (overridden by --verbose/--debug)",
         ),
-    ] = "warning",
+    ] = "info",
 ) -> None:
     level = _resolve_log_level(verbose, debug, log_level)
     configure_logging(level)
