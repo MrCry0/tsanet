@@ -16,8 +16,8 @@ try:
 except ImportError:
     sys.exit(
         "typer is not installed.\n"
-        "Install it with:  pip install tsanet[hub]\n"
-        "or:               pip install typer"
+        "Install it with:  pip install typer\n"
+        "or reinstall:      pip install --force-reinstall tsanet"
     )
 
 from tsanet.common.config import NetworkConfig

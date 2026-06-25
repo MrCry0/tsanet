@@ -118,34 +118,31 @@ token is rejected on both ends without taking down the hub.
 ## Installation
 
 tsanet is not yet published to a package index, so install it from the Git
-repository. Installing the suite as a tool provides the three console scripts
-on your PATH. Choose extras to match the role of the machine:
-
-- `hub` — serial support (`pyserial`), for a machine with tinySA units.
-- `cli` — the command-line controller (`typer`).
-- `gui` — the graphical controller (`PySide6`, `pyqtgraph`).
-- `all` — all of the above.
+repository. A bare install gives you `tsanet-hub` and `tsanet-ctl`. Add the
+`gui` extra for the graphical controller:
 
 ### uv (recommended)
 
 ```sh
-# Hub machine (headless): just the serial extra
-uv tool install "tsanet[hub] @ git+https://github.com/MrCry0/tsanet"
+# Hub or headless controller machine
+uv tool install "tsanet @ git+https://github.com/MrCry0/tsanet"
 
-# Controller workstation: the GUI
+# GUI workstation
 uv tool install "tsanet[gui] @ git+https://github.com/MrCry0/tsanet"
 ```
 
 ### pipx
 
 ```sh
-pipx install "tsanet[all] @ git+https://github.com/MrCry0/tsanet"
+pipx install "tsanet[gui] @ git+https://github.com/MrCry0/tsanet"
 ```
 
 ### pip
 
 ```sh
-pip install "tsanet[all] @ git+https://github.com/MrCry0/tsanet"
+pip install "tsanet @ git+https://github.com/MrCry0/tsanet"
+# or with the GUI:
+pip install "tsanet[gui] @ git+https://github.com/MrCry0/tsanet"
 ```
 
 ## Usage
@@ -261,11 +258,12 @@ included in the repository.
 This project uses [uv](https://docs.astral.sh/uv/):
 
 ```sh
-uv sync --all-extras     # create .venv with all extras + dev tools
-uv run ruff check .      # lint
-uv run ruff format .     # format
-uv run --extra cli --extra hub --extra gui pytest  # tests (including GUI imports)
-uv run --extra cli --extra hub pytest --ignore=tests/test_hardware.py  # skip PySide6
+uv sync                    # create .venv with core + dev tools
+uv sync --extra gui        # add GUI deps (PySide6, pyqtgraph)
+uv run ruff check .        # lint
+uv run ruff format .       # format
+uv run pytest              # tests (skip GUI: omit --extra gui)
+uv run --extra gui pytest  # tests including GUI imports
 ```
 
 ### Running from source
@@ -285,18 +283,18 @@ without activating the virtualenv.
 ### Hardware tests
 
 ```sh
-uv run --extra cli --extra hub pytest tests/test_hardware.py --run-hardware
+uv run pytest tests/test_hardware.py --run-hardware
 ```
 
-`uv sync` installs the `dev` dependency group automatically. The `all` extra
-pulls in the hub (`pyserial`), CLI (`typer`), and GUI (`PySide6`, `pyqtgraph`)
-dependencies; a headless hub box can sync just the hub extra with
-`uv sync --extra hub`.
+The `dev` dependency group (pytest, ruff, twine) is installed automatically
+by `uv sync`. The `gui` extra pulls in `PySide6` and `pyqtgraph`; omit it
+for a headless test run.
 
-Prefer pip? The same workflow is available with pip 25.1 or newer:
+### Building distributions
 
 ```sh
-pip install -e ".[all]" --group dev
+uv build                # creates dist/tsanet-*.whl and dist/tsanet-*.tar.gz
+uv run twine check dist/*  # validate before upload
 ```
 
 ## License

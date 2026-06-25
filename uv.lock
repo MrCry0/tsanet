@@ -1217,26 +1217,19 @@ source = { editable = "." }
 dependencies = [
     { name = "msgpack" },
     { name = "pydantic" },
+    { name = "pyserial" },
     { name = "pyyaml" },
+    { name = "typer" },
 ]
 
 [package.optional-dependencies]
 all = [
     { name = "pyqtgraph" },
-    { name = "pyserial" },
     { name = "pyside6" },
-    { name = "typer" },
-]
-cli = [
-    { name = "typer" },
 ]
 gui = [
     { name = "pyqtgraph" },
     { name = "pyside6" },
-]
-hub = [
-    { name = "pyserial" },
-    { name = "typer" },
 ]
 
 [package.dev-dependencies]
@@ -1252,16 +1245,13 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2" },
     { name = "pyqtgraph", marker = "extra == 'all'", specifier = ">=0.13" },
     { name = "pyqtgraph", marker = "extra == 'gui'", specifier = ">=0.13" },
-    { name = "pyserial", marker = "extra == 'all'", specifier = ">=3.5" },
-    { name = "pyserial", marker = "extra == 'hub'", specifier = ">=3.5" },
+    { name = "pyserial", specifier = ">=3.5" },
     { name = "pyside6", marker = "extra == 'all'", specifier = ">=6.5" },
     { name = "pyside6", marker = "extra == 'gui'", specifier = ">=6.5" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "typer", marker = "extra == 'all'", specifier = ">=0.12" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.12" },
-    { name = "typer", marker = "extra == 'hub'", specifier = ">=0.12" },
+    { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["all", "cli", "gui", "hub"]
+provides-extras = ["all", "gui"]
 
 [package.metadata.requires-dev]
 dev = [
