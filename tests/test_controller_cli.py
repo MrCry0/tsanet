@@ -52,3 +52,64 @@ def test_trace_save_reports_invalid_trace_id_cleanly():
     with pytest.raises(typer.Exit) as exc_info:
         cli_app.trace_save(trace_ids="1,abc", output=None)
     assert "invalid trace ID" in str(exc_info.value.exit_code)
+
+
+class _FakeRpcClient:
+    """Stand-in for RpcClient that records calls instead of touching a socket."""
+
+    instances: list["_FakeRpcClient"] = []
+
+    def __init__(self, config) -> None:
+        self.config = config
+        self.connected = False
+        self.calls: list[tuple[str, str, dict]] = []
+        _FakeRpcClient.instances.append(self)
+
+    def connect(self) -> None:
+        self.connected = True
+
+    def call(self, domain: str, op: str, **kwargs: object) -> object:
+        self.calls.append((domain, op, kwargs))
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _reset_fake_client():
+    _FakeRpcClient.instances.clear()
+    yield
+    _FakeRpcClient.instances.clear()
+
+
+def test_device_option_selects_device_after_connect(monkeypatch):
+    """--device must select that device, in-process, right after connecting.
+
+    Regression for the dropped 'devices select' subcommand: each tsanet-ctl
+    invocation is its own connection, so selection has to happen within the
+    same _setup() call as the rest of the command, not as a separate step.
+    """
+    monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
+    cli_app._setup(
+        config_path=None,
+        mode="dial",
+        transport="tcp",
+        address="127.0.0.1",
+        port=7777,
+        device="dev-2",
+    )
+    client = _FakeRpcClient.instances[-1]
+    assert client.connected
+    assert client.calls == [("devices", "select", {"device_id": "dev-2"})]
+
+
+def test_no_device_option_skips_select(monkeypatch):
+    monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
+    cli_app._setup(
+        config_path=None,
+        mode="dial",
+        transport="tcp",
+        address="127.0.0.1",
+        port=7777,
+        device=None,
+    )
+    client = _FakeRpcClient.instances[-1]
+    assert client.calls == []
