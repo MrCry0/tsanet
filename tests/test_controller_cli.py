@@ -32,6 +32,40 @@ def test_freq_raises_clean_error_on_invalid_frequency():
     assert "invalid frequency" in str(exc_info.value.exit_code)
 
 
+def _fake_sweep_call(get_response: str):
+    def fake_call(domain, op, **kwargs):
+        assert domain == "sweep"
+        if op == "get":
+            return get_response
+        return None  # the setters' own return value is unused
+
+    return fake_call
+
+
+def test_sweep_range_reports_device_clamped_points(monkeypatch, capsys):
+    """The device can silently clamp points (e.g. 900 -> 450 max); the CLI
+    must report what was actually applied, not echo the request back."""
+    monkeypatch.setattr(cli_app, "_call", _fake_sweep_call("2400000000 2490000000 450"))
+    cli_app.sweep_range(start="2400mhz", stop="2490mhz", points=900)
+    out = capsys.readouterr().out
+    assert "450" in out
+    assert "900" not in out
+
+
+def test_sweep_start_reports_actual_queried_value(monkeypatch, capsys):
+    monkeypatch.setattr(cli_app, "_call", _fake_sweep_call("433000000 868000000"))
+    cli_app.sweep_start(hz="100mhz")
+    out = capsys.readouterr().out
+    assert "433" in out
+
+
+def test_sweep_state_raises_cleanly_on_unparseable_response(monkeypatch):
+    monkeypatch.setattr(cli_app, "_call", _fake_sweep_call("not a sweep response"))
+    with pytest.raises(typer.Exit) as exc_info:
+        cli_app._sweep_state()
+    assert "unexpected sweep response" in str(exc_info.value.exit_code)
+
+
 def test_trace_stats_reports_empty_range_cleanly(monkeypatch):
     """compute_stats() raising on an empty range must surface as a clean error."""
     monkeypatch.setattr(

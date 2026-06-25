@@ -181,17 +181,30 @@ sweep_app = typer.Typer(no_args_is_help=True)
 app.add_typer(sweep_app, name="sweep", help="Sweep control")
 
 
+def _sweep_state() -> tuple[int, int, Optional[int]]:
+    """Query the device's actual current sweep start/stop/points.
+
+    Setters report this afterward rather than echoing the requested value,
+    since the device can silently clamp it (e.g. a 900-point request is
+    capped to its 450-point maximum) without returning an error.
+    """
+    raw = str(_call("sweep", "get"))
+    parts = raw.split()
+    try:
+        if len(parts) < 2:
+            raise ValueError("too few fields")
+        start = int(parts[0])
+        stop = int(parts[1])
+        points = int(parts[2]) if len(parts) > 2 else None
+    except ValueError as exc:
+        raise typer.Exit(f"unexpected sweep response: {raw!r}") from exc
+    return start, stop, points
+
+
 @sweep_app.command(name="get")
 def sweep_get() -> None:
     """Print current sweep settings."""
-    raw = _call("sweep", "get")
-    parts = str(raw).split()
-    if len(parts) < 2:
-        typer.echo(raw)
-        return
-    start = int(parts[0])
-    stop = int(parts[1])
-    points = int(parts[2]) if len(parts) > 2 else None
+    start, stop, points = _sweep_state()
     center = (start + stop) // 2
     typer.echo(f"Start:      {_fmt_hz(start)}")
     typer.echo(f"End:        {_fmt_hz(stop)}")
@@ -211,7 +224,8 @@ def sweep_start(hz: Annotated[str, typer.Argument(help="Start frequency (e.g. 10
     """Set sweep start frequency."""
     freq = _freq(hz)
     _call("sweep", "set_start", hz=freq)
-    typer.echo(f"start = {_fmt_hz(freq)}")
+    start, _stop, _points = _sweep_state()
+    typer.echo(f"start = {_fmt_hz(start)}")
 
 
 @sweep_app.command(name="stop")
@@ -219,7 +233,8 @@ def sweep_stop(hz: Annotated[str, typer.Argument(help="Stop frequency")]) -> Non
     """Set sweep stop frequency."""
     freq = _freq(hz)
     _call("sweep", "set_stop", hz=freq)
-    typer.echo(f"stop = {_fmt_hz(freq)}")
+    _start, stop, _points = _sweep_state()
+    typer.echo(f"stop = {_fmt_hz(stop)}")
 
 
 @sweep_app.command(name="center")
@@ -227,7 +242,8 @@ def sweep_center(hz: Annotated[str, typer.Argument(help="Center frequency")]) ->
     """Set sweep center frequency."""
     freq = _freq(hz)
     _call("sweep", "set_center", hz=freq)
-    typer.echo(f"center = {_fmt_hz(freq)}")
+    start, stop, _points = _sweep_state()
+    typer.echo(f"center = {_fmt_hz((start + stop) // 2)}")
 
 
 @sweep_app.command(name="span")
@@ -235,7 +251,8 @@ def sweep_span(hz: Annotated[str, typer.Argument(help="Span")]) -> None:
     """Set sweep span."""
     freq = _freq(hz)
     _call("sweep", "set_span", hz=freq)
-    typer.echo(f"span = {_fmt_hz(freq)}")
+    start, stop, _points = _sweep_state()
+    typer.echo(f"span = {_fmt_hz(stop - start)}")
 
 
 @sweep_app.command(name="cw")
@@ -243,7 +260,8 @@ def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency")]) -> None:
     """Set sweep to continuous-wave mode at a frequency."""
     freq = _freq(hz)
     _call("sweep", "set_cw", hz=freq)
-    typer.echo(f"cw = {_fmt_hz(freq)}")
+    start, _stop, _points = _sweep_state()
+    typer.echo(f"cw = {_fmt_hz(start)}")
 
 
 @sweep_app.command(name="range")
@@ -258,8 +276,9 @@ def sweep_range(
     s = _freq(start)
     t = _freq(stop)
     _call("sweep", "set_start_stop", start=s, stop=t, points=points)
-    extra = f" ({points} pts)" if points else ""
-    typer.echo(f"range = {_fmt_hz(s)} - {_fmt_hz(t)}{extra}")
+    actual_start, actual_stop, actual_points = _sweep_state()
+    extra = f" ({actual_points} pts)" if actual_points is not None else ""
+    typer.echo(f"range = {_fmt_hz(actual_start)} - {_fmt_hz(actual_stop)}{extra}")
 
 
 @sweep_app.command(name="time")
