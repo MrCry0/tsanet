@@ -1,4 +1,4 @@
-"""``tsanet-ctl`` entry point (brief 9, 11.6).
+"""``tsanet-ctl`` entry point.
 
 Typer-based CLI with command groups matching the RPC domains.
 """
@@ -8,10 +8,18 @@ from __future__ import annotations
 import csv
 import datetime
 import io
+import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
-import typer
+try:
+    import typer
+except ImportError:
+    sys.exit(
+        "typer is not installed.\n"
+        "Install it with:  pip install tsanet[cli]\n"
+        "or:               pip install typer"
+    )
 
 from tsanet.common.config import NetworkConfig
 from tsanet.common.errors import AuthenticationError, ConnectionClosed, SecurityNotImplementedError

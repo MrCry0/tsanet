@@ -1236,6 +1236,7 @@ gui = [
 ]
 hub = [
     { name = "pyserial" },
+    { name = "typer" },
 ]
 
 [package.dev-dependencies]
@@ -1258,6 +1259,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "typer", marker = "extra == 'all'", specifier = ">=0.12" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.12" },
+    { name = "typer", marker = "extra == 'hub'", specifier = ">=0.12" },
 ]
 provides-extras = ["all", "cli", "gui", "hub"]
 

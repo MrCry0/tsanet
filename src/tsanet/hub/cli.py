@@ -1,4 +1,4 @@
-"""``tsanet-hub`` entry point (brief 9, 11.5).
+"""``tsanet-hub`` entry point.
 
 Parses config and CLI flags, then starts the hub server.  The hub owns USB
 serial connections to tinySA devices and exposes them over the network.
@@ -11,7 +11,14 @@ import signal
 import sys
 from typing import Annotated, Optional
 
-import typer
+try:
+    import typer
+except ImportError:
+    sys.exit(
+        "typer is not installed.\n"
+        "Install it with:  pip install tsanet[hub]\n"
+        "or:               pip install typer"
+    )
 
 from tsanet.common.config import NetworkConfig
 from tsanet.common.errors import SecurityNotImplementedError

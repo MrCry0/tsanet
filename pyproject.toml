@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-hub = ["pyserial>=3.5"]
+hub = ["pyserial>=3.5", "typer>=0.12"]
 cli = ["typer>=0.12"]
 gui = ["PySide6>=6.5", "pyqtgraph>=0.13"]
 all = ["tsanet[hub,cli,gui]"]
