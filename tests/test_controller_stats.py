@@ -88,6 +88,33 @@ class TestStats:
             compute_stats([1, 2], [1.0], "RAW", 0, 10)
 
 
+class TestChannelPower:
+    def test_dbm_channel_power_is_average_plus_bin_count(self):
+        # Summing N equal-power points adds 10*log10(N) over their average.
+        freqs = [100_000_000, 200_000_000]
+        values = [-50.0, -50.0]
+        result = compute_stats(freqs, values, "dBm", freqs[0], freqs[-1])
+        assert _approx(result.channel_power, result.average + 10 * math.log10(2))
+
+    def test_voltage_channel_power_is_rms_of_sum_of_squares(self):
+        freqs = [100_000_000, 200_000_000]
+        values = [3.0, 4.0]
+        result = compute_stats(freqs, values, "V", freqs[0], freqs[-1])
+        assert _approx(result.channel_power, math.sqrt(9 + 16))
+
+    def test_watt_channel_power_is_plain_sum(self):
+        freqs = [100_000_000, 200_000_000]
+        values = [1.0, 5.0]
+        result = compute_stats(freqs, values, "W", freqs[0], freqs[-1])
+        assert result.channel_power == 6.0
+
+    def test_raw_channel_power_is_plain_sum(self):
+        freqs = [100_000_000, 200_000_000]
+        values = [100.0, 200.0]
+        result = compute_stats(freqs, values, "RAW", freqs[0], freqs[-1])
+        assert result.channel_power == 300.0
+
+
 class TestOccupiedBandwidth:
     def test_flat_power_spans_nearly_full_range(self):
         freqs = list(range(100_000_000, 110_000_000, 1_000_000))

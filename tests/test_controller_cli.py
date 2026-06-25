@@ -67,9 +67,21 @@ def test_trace_stats_omits_field_strength_without_antenna_factor(monkeypatch, ca
     cli_app.trace_stats(trace_id=2, start="0hz", stop="1000hz", unit="dBm")
     out = capsys.readouterr().out
     assert "Field strength" not in out
+    assert "Channel power" in out
     assert "Occupied BW" in out
     assert "PAPR" in out
     assert "Flatness" in out
+
+
+def test_trace_stats_channel_power_is_the_headline_indicator(monkeypatch, capsys):
+    """Channel power must always be shown, ahead of every other indicator."""
+    _patch_trace_data(monkeypatch, [100, 200, 300], [-50.0, -50.0, -50.0])
+    cli_app.trace_stats(trace_id=2, start="0hz", stop="1000hz", unit="dBm", antenna_factor=20.0)
+    out = capsys.readouterr().out
+    lines = [line for line in out.splitlines() if line.strip()]
+    labels = [line.split(":")[0].strip() for line in lines[1:]]
+    assert labels[0] == "Channel power"
+    assert labels[1] == "Field strength"
 
 
 def test_trace_stats_shows_field_strength_with_antenna_factor(monkeypatch, capsys):

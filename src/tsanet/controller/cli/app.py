@@ -556,6 +556,7 @@ def trace_stats(
     n = sum(1 for f in freqs if start_hz <= f <= stop_hz)
 
     typer.echo(f"Trace {trace_id} stats ({start} - {stop}, {n} points), unit: {unit}")
+    typer.echo(f"  {'Channel power':<15s}: {result.channel_power:.1f} {unit}")
     if result.field_strength_dbuvm is not None:
         typer.echo(f"  {'Field strength':<15s}: {result.field_strength_dbuvm:.1f} dBuV/m")
     typer.echo(f"  {'Occupied BW':<15s}: {_fmt_hz(result.occupied_bandwidth_hz)} (99% power)")

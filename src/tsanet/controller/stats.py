@@ -24,6 +24,7 @@ class StatsResult:
     min_freq: int
     maximum: float
     max_freq: int
+    channel_power: float
     occupied_bandwidth_hz: int
     papr_db: float
     flatness_db: float
@@ -82,6 +83,7 @@ def compute_stats(
         min_freq=fmin,
         maximum=vmax,
         max_freq=fmax,
+        channel_power=_channel_power(vals, unit),
         occupied_bandwidth_hz=_occupied_bandwidth(freqs, vals, unit),
         papr_db=_papr_db(vals, unit),
         flatness_db=_flatness_db(vmin, vmax, unit),
@@ -138,6 +140,25 @@ def _linear_power(values: list[float], unit: str) -> list[float]:
         return [v * v for v in values]
     # W, RAW: already linear, or no defined power relationship.
     return list(values)
+
+
+def _channel_power(values: list[float], unit: str) -> float:
+    """Total power integrated across the selected range, in the trace's unit.
+
+    This sums per-point power directly (no resolution-bandwidth correction,
+    since the device does not report RBW) -- it tracks relative changes in
+    total power across a band, not an absolute, metrology-grade reading.
+
+    Power-domain (dB or linear-W/RAW) units sum directly. Voltage-domain
+    units (V, Vpp) combine non-coherently via RMS-of-sum-of-squares before
+    reporting back in volts, matching how _average() handles those units.
+    """
+    if unit in ("dBm", "dBmV", "dBuV"):
+        return 10 * math.log10(sum(_linear_power(values, unit)))
+    if unit in ("V", "Vpp"):
+        return math.sqrt(sum(v * v for v in values))
+    # W, RAW: already linear; plain sum.
+    return sum(values)
 
 
 def _occupied_bandwidth(freqs: list[int], values: list[float], unit: str) -> int:
