@@ -30,3 +30,25 @@ def test_freq_raises_clean_error_on_invalid_frequency():
     with pytest.raises(typer.Exit) as exc_info:
         cli_app._freq("600mh")
     assert "invalid frequency" in str(exc_info.value.exit_code)
+
+
+def test_trace_stats_reports_empty_range_cleanly(monkeypatch):
+    """compute_stats() raising on an empty range must surface as a clean error."""
+    monkeypatch.setattr(
+        cli_app,
+        "_call",
+        lambda domain, op, **kwargs: {
+            "frequencies": [100, 200, 300],
+            "traces": {"2": [1.0, 2.0, 3.0]},
+        },
+    )
+    with pytest.raises(typer.Exit) as exc_info:
+        cli_app.trace_stats(trace_id=2, start="10ghz", stop="11ghz", unit="dBm")
+    assert "no data points in range" in str(exc_info.value.exit_code)
+
+
+def test_trace_save_reports_invalid_trace_id_cleanly():
+    """A non-numeric --trace ID (e.g. '1,abc') must not crash with a traceback."""
+    with pytest.raises(typer.Exit) as exc_info:
+        cli_app.trace_save(trace_ids="1,abc", output=None)
+    assert "invalid trace ID" in str(exc_info.value.exit_code)
