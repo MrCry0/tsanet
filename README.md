@@ -108,7 +108,9 @@ tsanet-hub --mode listen --transport tcp --address 0.0.0.0 --port 7777
 ```
 
 The hub auto-selects the only device when exactly one is present, so the
-controller can start issuing commands immediately.
+controller can start issuing commands immediately. With more than one
+device attached, pass `--device <device_id>` on the controller (see
+below) to pick which one a given invocation targets.
 
 ### Controller CLI
 
@@ -118,6 +120,11 @@ Connect to a hub and control the device:
 # List devices and check session
 tsanet-ctl --address 127.0.0.1 --port 7777 devices list
 tsanet-ctl --address 127.0.0.1 --port 7777 session status
+
+# On a hub with more than one device attached, target a specific one
+# (each tsanet-ctl invocation is its own connection, so --device applies
+# only to that single command)
+tsanet-ctl --address 127.0.0.1 --port 7777 --device /dev/ttyACM1 sweep get
 
 # Sweep control
 tsanet-ctl --address 127.0.0.1 --port 7777 sweep range 100mhz 500mhz --points 450

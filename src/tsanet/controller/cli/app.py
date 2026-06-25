@@ -67,6 +67,14 @@ def _setup(
         Optional[int],
         typer.Option("--port", help="TCP port"),
     ] = None,
+    device: Annotated[
+        Optional[str],
+        typer.Option(
+            "--device",
+            "-d",
+            help="Device ID to select on a hub with more than one device attached",
+        ),
+    ] = None,
 ) -> None:
     global _client
     config = ControllerConfig.load(config_path or DEFAULT_CONFIG_PATH)
@@ -82,7 +90,12 @@ def _setup(
     _client = RpcClient(config)
     try:
         _client.connect()
+        if device is not None:
+            _client.call("devices", "select", device_id=device)
     except (SecurityNotImplementedError, AuthenticationError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except RpcError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
@@ -106,15 +119,6 @@ def devices_list() -> None:
             f"{d['device_id']:<20s} {d['model']:<10s} fw={d['firmware'] or '?'}"
             f"  hw={d['hardware']}  {'[BUSY]' if d['busy'] else '[free]'}"
         )
-
-
-@devices_app.command(name="select")
-def devices_select(
-    device_id: Annotated[str, typer.Argument(help="Device ID to select")],
-) -> None:
-    """Select a device for subsequent commands."""
-    _call("devices", "select", device_id=device_id)
-    typer.echo(f"selected {device_id}")
 
 
 # -- device ----------------------------------------------------------------
