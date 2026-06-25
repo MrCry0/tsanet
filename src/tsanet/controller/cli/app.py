@@ -485,7 +485,10 @@ def trace_save(
     ] = None,
 ) -> None:
     """Save trace data as CSV."""
-    ids = [int(s.strip()) for s in trace_ids.split(",") if s.strip()]
+    try:
+        ids = [int(s.strip()) for s in trace_ids.split(",") if s.strip()]
+    except ValueError as exc:
+        raise typer.Exit(f"invalid trace ID in {trace_ids!r}: {exc}") from exc
     if not ids:
         _die("at least one trace ID is required")
 
@@ -533,7 +536,10 @@ def trace_stats(
     freqs = data["frequencies"]
     vals = data["traces"][str(trace_id)]
 
-    result = compute_stats(freqs, vals, unit, start_hz, stop_hz)
+    try:
+        result = compute_stats(freqs, vals, unit, start_hz, stop_hz)
+    except ValueError as exc:
+        raise typer.Exit(str(exc)) from exc
     n = sum(1 for f in freqs if start_hz <= f <= stop_hz)
 
     typer.echo(f"Trace {trace_id} stats ({start} - {stop}, {n} points), unit: {unit}")
