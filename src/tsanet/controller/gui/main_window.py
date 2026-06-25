@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
             self._connect(dlg.config())
         else:
             from PySide6.QtWidgets import QApplication
+
             QApplication.quit()
 
     def _connect(self, config):

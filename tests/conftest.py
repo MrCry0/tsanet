@@ -43,6 +43,7 @@ def _has_tinysa():
             name = port_info.device
             try:
                 import serial
+
                 ser = serial.Serial(name, baudrate=115200, timeout=0.5)
                 info = tinysa_probe(ser, attempts=1)
                 ser.close()
