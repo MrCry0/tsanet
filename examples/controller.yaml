@@ -1,0 +1,8 @@
+network:
+  mode: dial
+  transport: tcp
+  address: 127.0.0.1
+  port: 8888
+security:
+  mode: token
+  token: e9e97921202df4349d2c0773f44f40e8affd86412e9599489b2171ff18971d0f
