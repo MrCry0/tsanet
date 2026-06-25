@@ -1,21 +1,46 @@
 # tsanet
 
-Network control suite for tinySA spectrum analyzers.
+Network control suite for **tinySA / tinySA Ultra** spectrum analyzers.
 
 `tsanet` lets one or more tinySA units, physically attached via USB to one
 machine, be discovered, indexed, and remotely controlled from another machine
 (or the same machine) over a network.
 
+## Quick start
+
+Start the hub on the machine with tinySA units attached:
+```sh
+tsanet-hub --port 7777
+```
+
+From any controller machine, open the GUI:
+```sh
+tsanet-gui
+```
+And connect to the hub's IP and port in the connection dialog.
+
+Or use the command-line controller for scripting and automation:
+```sh
+tsanet-ctl --address 127.0.0.1 --port 7777 devices list
+tsanet-ctl --address 127.0.0.1 --port 7777 sweep center 433.92mhz
+tsanet-ctl --address 127.0.0.1 --port 7777 trace save --trace 1,2 -o sweep.csv
+```
+
+[Example configuration files](examples/) are provided for both hub and
+controller setups, including token authentication.
+
 ## Components
 
 The suite is one Python package (`tsanet`) exposing three console scripts:
 
-- `tsanet-hub` - runs on the machine with tinySA units plugged in. Owns the
-  USB serial connections, discovers and indexes connected devices, and
+- **`tsanet-hub`** — Runs on the machine with tinySA units plugged in. Owns
+  the USB serial connections, discovers and indexes connected devices, and
   executes commands received over the network.
-- `tsanet-ctl` - command-line controller that issues commands to a hub.
-- `tsanet-gui` - graphical controller with the same command set, plus a live
-  spectrum graph and trace statistics.
+- **`tsanet-ctl`** — Command-line controller with 50+ commands across all RPC
+  domains, frequency parsing, and unit-aware trace statistics.
+- **`tsanet-gui`** — Graphical controller with device listing, sweep controls,
+  trace management, screenshot capture, live spectrum graph (up to 3
+  configurable trace lines), and trace statistics.
 
 ## Architecture
 
@@ -37,7 +62,7 @@ retry behaviour, and exposes the real wire command vocabulary.
 
 ## Status
 
-Phases 1–7 are implemented and tested:
+Phases 1-7 are implemented and tested:
 
 - Device serial protocol: command framing, echo and prompt handling, retries,
   text and binary responses. Full verified tinySA wire command vocabulary.
@@ -48,20 +73,47 @@ Phases 1–7 are implemented and tested:
   listen/dial symmetry so the hub can operate behind NAT.
 - Hub server with single-session management, force-takeover, auto-device
   selection, and automatic LNA enable for sweep frequencies above 800 MHz.
+  Shared-secret token authentication, checked immediately after connection
+  establishment.
 - RPC dispatcher routing all domain operations (device, sweep, marker, trace,
   signal, menu, preset, capture, raw, devices, session).
 - Live-graph subscription push loop with frequency caching and interval pacing.
-- Controller CLI (`tsanet-ctl`) with 50+ commands across all RPC domains,
+- Controller CLI (`tsanet-ctl`) with 50+ commands, `--device` selection option,
   frequency parsing (1.5ghz, 250k, 433.92mhz), and unit-aware trace stats.
-- Controller GUI (`tsanet-gui`) with connection dialog, device panel, sweep
-  controls, screenshot capture, live spectrum graph, and trace statistics.
-- Shared-secret token authentication (`security.mode: token`), checked right
-  after the connection is established, before any RPC traffic.
+- Controller GUI (`tsanet-gui`) with connection dialog (including token auth),
+  device panel, sweep controls with mismatch warnings, screenshot capture
+  (fetch/save/copy), live spectrum graph (3 lines, max-speed or fixed-interval),
+  and comprehensive trace statistics dialog.
+- Robust error handling: connection failures, invalid frequency arguments,
+  firmware rejection of unknown commands, trace parsing errors, and sweep
+  value clamping are caught and reported cleanly rather than crashing.
 
 Remaining: TLS (`tls-token` mode is accepted by config validation but the
 hub and controller refuse to start with a clear error until it is built),
 packaging (PyInstaller), reconnect and idle-timeout logic, and integration
 tests against real hardware.
+
+## Security
+
+Three security modes are supported:
+
+| Mode | Auth | Encryption | Use case |
+|---|---|---|---|
+| `none` | — | — | Trusted loopback or Unix socket |
+| `token` | Shared secret | — | Trusted network + peer verification |
+| `tls-token` | Shared secret | TLS | Untrusted network (not yet implemented) |
+
+The hub logs a warning if `none` is used over non-loopback TCP.
+
+**Token authentication** is configured by setting the same `token` value in
+both `hub.yaml` and `controller.yaml`:
+```yaml
+security:
+  mode: token
+  token: a-long-random-shared-secret
+```
+The check happens immediately after the connection is established. A mismatched
+token is rejected on both ends without taking down the hub.
 
 ## Installation
 
@@ -69,10 +121,10 @@ tsanet is not yet published to a package index, so install it from the Git
 repository. Installing the suite as a tool provides the three console scripts
 on your PATH. Choose extras to match the role of the machine:
 
-- `hub` - serial support (`pyserial`), for a machine with tinySA units.
-- `gui` - the graphical controller (`PySide6`, `pyqtgraph`).
-- `cli` - the command-line controller (`typer`).
-- `all` - all of the above.
+- `hub` — serial support (`pyserial`), for a machine with tinySA units.
+- `cli` — the command-line controller (`typer`).
+- `gui` — the graphical controller (`PySide6`, `pyqtgraph`).
+- `all` — all of the above.
 
 ### uv (recommended)
 
@@ -122,8 +174,6 @@ tsanet-ctl --address 127.0.0.1 --port 7777 devices list
 tsanet-ctl --address 127.0.0.1 --port 7777 session status
 
 # On a hub with more than one device attached, target a specific one
-# (each tsanet-ctl invocation is its own connection, so --device applies
-# only to that single command)
 tsanet-ctl --address 127.0.0.1 --port 7777 --device /dev/ttyACM1 sweep get
 
 # Sweep control
@@ -157,9 +207,33 @@ tsanet-ctl --address 127.0.0.1 --port 7777 sweep center 1.785ghz
 tsanet-gui
 ```
 
-Opens a tabbed window with device listing, sweep controls, trace settings,
-screenshot capture, live spectrum graph (3 configurable lines, max-speed or
-fixed-interval updates), and trace statistics.
+The GUI opens a connection dialog first. After connecting, a tabbed window
+provides:
+
+| Tab | Function |
+|---|---|
+| **Devices** | List attached units with [free]/[BUSY] status; click to select |
+| **Sweep** | Set start/stop/points, center, span, or CW frequency. Fields auto-refresh on tab activation and can be manually refreshed. A warning dialog appears if the device silently clamps a requested value. |
+| **Trace** | Enable/disable traces (1-4), set calculation modes (minh, maxh, aver4, etc.). Open the **Trace Stats** dialog for detailed analysis. |
+| **Capture** | Fetch the device screen (PNG), save to file, or copy to clipboard. |
+| **Live Graph** | Real-time spectrum with up to 3 configurable trace lines, max-speed or fixed-interval updates. |
+
+#### Trace statistics
+
+Available from the Trace tab via the "Trace Stats..." button, the statistics
+dialog computes (over a selectable frequency sub-range and display unit):
+
+- **Average power** — unit-aware linear averaging (power dB, voltage dB, or linear)
+- **Median** — midpoint of the sorted values
+- **Min / Max** — with their frequencies
+- **Channel power** — total integrated power across the band
+- **Occupied bandwidth (99% OBW)** — ITU-R/FCC convention
+- **PAPR** — peak-to-average power ratio (crest factor), in dB
+- **Flatness** — peak-to-trough variation across the range, in dB
+- **Field strength** — dBuV/m, when an antenna factor (dB/m) is provided
+
+See the [CLI trace stats documentation](examples/README.md) for the equivalent
+command-line interface and [example scripts](examples/).
 
 ## Configuration
 
@@ -171,35 +245,16 @@ Settings come from a YAML file, overridable by command-line flags:
 ```yaml
 network:
   mode: listen        # listen | dial
-  transport: tcp       # tcp | unix
+  transport: tcp      # tcp | unix
   address: 0.0.0.0
   port: 7777
 security:
-  mode: none           # none | token | tls-token
+  mode: none          # none | token | tls-token
   token: null
 ```
 
-### Security modes
-
-- `none` - no authentication or encryption. Fine on a trusted loopback or
-  Unix socket; the hub logs a warning if used over non-loopback TCP.
-- `token` - a shared secret checked immediately after the connection is
-  established, before any RPC traffic. Set the same `token` value in both
-  `hub.yaml` and `controller.yaml`:
-
-  ```yaml
-  security:
-    mode: token
-    token: a-long-random-shared-secret
-  ```
-
-  This authenticates the peer but does not encrypt traffic - combine with a
-  Unix socket or an SSH/VPN tunnel if the link isn't otherwise trusted. A
-  mismatched token is rejected on both ends without taking down the hub.
-- `tls-token` - TLS plus the token, for encryption over an untrusted network.
-  The config schema accepts it, but the hub and controller currently exit
-  immediately with `security mode 'tls-token' is not implemented yet` if
-  selected.
+[Example configuration files](examples/) with token authentication are
+included in the repository.
 
 ## Development
 
@@ -207,8 +262,8 @@ This project uses [uv](https://docs.astral.sh/uv/):
 
 ```sh
 uv sync --all-extras     # create .venv with all extras + dev tools
-uv run ruff check .       # lint
-uv run ruff format .      # format
+uv run ruff check .      # lint
+uv run ruff format .     # format
 uv run --extra cli --extra hub --extra gui pytest  # tests (including GUI imports)
 uv run --extra cli --extra hub pytest --ignore=tests/test_hardware.py  # skip PySide6
 ```
