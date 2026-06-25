@@ -1,4 +1,4 @@
-"""Live signal graph panel with subscription push (brief 6.3, 10)."""
+"""Live signal graph panel with subscription push."""
 
 from __future__ import annotations
 
@@ -43,33 +43,39 @@ class LiveGraphPanel(QWidget):
         self._plot.setLabel("left", "Amplitude", "dBm")
         self._plot.showGrid(x=True, y=True)
 
-        # --- line config ---
         line_group = QGroupBox("Lines")
-        line_layout = QFormLayout()
         self._line_calcs: list[QComboBox] = []
         self._line_checks: list[QCheckBox] = []
         defaults = ["minh", "aver4", "maxh"]
         for i in range(3):
             chk = QCheckBox(f"Line {i + 1}")
             chk.setChecked(True)
+            chk.setToolTip(f"Enable trace line {i + 1} in the live graph")
             calc = QComboBox()
             calc.addItems(sorted(VALID_CALC))
             calc.setCurrentText(defaults[i])
+            calc.setToolTip(
+                "Trace calculation mode: minh (min-hold), maxh (max-hold), "
+                "aver4 (4-sample average), off, write, view, blank"
+            )
+            line_layout = QFormLayout()
             line_layout.addRow(chk, calc)
+            line_group.setLayout(line_layout)
             self._line_checks.append(chk)
             self._line_calcs.append(calc)
-        line_group.setLayout(line_layout)
 
-        # --- update mode ---
         mode_group = QGroupBox("Update")
         self._max_speed = QRadioButton("Max speed")
         self._max_speed.setChecked(True)
+        self._max_speed.setToolTip("Update the graph as fast as the device produces sweeps")
         self._fixed = QRadioButton("Fixed interval")
+        self._fixed.setToolTip("Update the graph at a fixed rate (0.1 to 60 seconds)")
         self._interval = QDoubleSpinBox()
         self._interval.setRange(0.1, 60)
         self._interval.setValue(0.5)
         self._interval.setSuffix(" sec")
         self._interval.setEnabled(False)
+        self._interval.setToolTip("Fixed update interval in seconds")
         self._fixed.toggled.connect(lambda on: self._interval.setEnabled(on))
 
         mode_layout = QVBoxLayout(mode_group)
@@ -79,17 +85,17 @@ class LiveGraphPanel(QWidget):
         h.addWidget(self._interval)
         mode_layout.addLayout(h)
 
-        # --- controls ---
         self._start_btn = QPushButton("Start")
+        self._start_btn.setToolTip("Enable selected traces on the device and start live streaming")
         self._start_btn.clicked.connect(self._start)
         self._stop_btn = QPushButton("Stop")
         self._stop_btn.setEnabled(False)
+        self._stop_btn.setToolTip("Stop live streaming and unsubscribe")
         self._stop_btn.clicked.connect(self._stop)
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(self._start_btn)
         btn_layout.addWidget(self._stop_btn)
 
-        # --- layout ---
         left = QVBoxLayout()
         left.addWidget(line_group)
         left.addWidget(mode_group)

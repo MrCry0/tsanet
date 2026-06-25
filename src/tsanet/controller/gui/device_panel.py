@@ -1,4 +1,4 @@
-"""Device list and selection widget (brief 10)."""
+"""Device list and selection widget."""
 
 from __future__ import annotations
 
@@ -21,12 +21,17 @@ class DevicePanel(QGroupBox):
         self._rpc = rpc
 
         self._list = QListWidget()
+        self._list.setToolTip(
+            "Connected devices — click one to take control of it.\n"
+            "[BUSY] means another session has it locked; [free] means it is available."
+        )
         self._list.currentItemChanged.connect(self._on_select)
 
         self._info = QLabel("No device selected")
         self._info.setWordWrap(True)
 
         refresh = QPushButton("Refresh")
+        refresh.setToolTip("Re-scan for attached devices")
         refresh.clicked.connect(self.refresh)
 
         layout = QVBoxLayout(self)

@@ -1,4 +1,4 @@
-"""Main window for the controller GUI (brief 10)."""
+"""Main window for the controller GUI."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tsanet import __version__
 from tsanet.controller.gui.capture_viewer import CaptureViewer
 from tsanet.controller.gui.connection_dialog import ConnectionDialog
 from tsanet.controller.gui.device_panel import DevicePanel
@@ -35,15 +36,18 @@ class MainWindow(QMainWindow):
 
         self._status = QStatusBar()
         self.setStatusBar(self._status)
+        self._status.showMessage("Not connected — open File > Connect or restart to connect")
+
+        self._build_menu()
 
         tabs = QTabWidget()
         tabs.currentChanged.connect(self._on_tab_changed)
         self._tabs = tabs
-        self._device_panel = QWidget()  # placeholder
+        self._device_panel = QWidget()
         self._sweep_panel = self._build_sweep_panel()
         self._trace_panel = self._build_trace_panel()
-        self._capture_viewer = QWidget()  # placeholder
-        self._live_graph = QWidget()  # placeholder
+        self._capture_viewer = QWidget()
+        self._live_graph = QWidget()
 
         self._SWEEP_TAB = 1
 
@@ -59,7 +63,86 @@ class MainWindow(QMainWindow):
         else:
             self._show_connection_dialog()
 
-    # -- connection --------------------------------------------------------
+    # -- menu ---------------------------------------------------------------
+
+    def _build_menu(self):
+        menu = self.menuBar()
+        file_menu = menu.addMenu("&File")
+        reconnect = file_menu.addAction("&Connect...")
+        reconnect.triggered.connect(self._show_connection_dialog)
+        file_menu.addSeparator()
+        quit_act = file_menu.addAction("&Quit")
+        quit_act.triggered.connect(self.close)
+
+        help_menu = menu.addMenu("&Help")
+        help_menu.addAction("Usage &Guide", self._show_guide)
+        help_menu.addAction("&About tsanet...", self._show_about)
+
+    def _show_about(self):
+        QMessageBox.about(
+            self,
+            "About tsanet",
+            (
+                f"<b>tsanet {__version__}</b>"
+                "<br>Network control suite for tinySA spectrum analyzers."
+                "<br><br>"
+                "Components:"
+                "<ul>"
+                "<li><tt>tsanet-hub</tt> — device host (USB serial)</li>"
+                "<li><tt>tsanet-ctl</tt> — command-line controller</li>"
+                "<li><tt>tsanet-gui</tt> — graphical controller</li>"
+                "</ul>"
+                "License: GPL-2.0-only"
+                "<br>"
+                "<a href='https://github.com/MrCry0/tsanet'>github.com/MrCry0/tsanet</a>"
+            ),
+        )
+
+    def _show_guide(self):
+        QMessageBox.information(
+            self,
+            "Usage Guide",
+            (
+                "<b>Getting started</b>"
+                "<ol>"
+                "<li>Start <tt>tsanet-hub</tt> on the machine with tinySA units attached.</li>"
+                "<li>Open File > Connect and enter the hub's address and port.</li>"
+                "<li>Use the Devices tab to select which tinySA to control.</li>"
+                "</ol>"
+                "<b>Tabs</b>"
+                "<ul>"
+                "<li><b>Devices</b> — list attached units; click one to take control.</li>"
+                "<li><b>Sweep</b> — set start/stop/center/span/CW; fields refresh "
+                "on activation.</li>"
+                "<li><b>Trace</b> — enable/disable trace modes and open statistics.</li>"
+                "<li><b>Capture</b> — fetch, save, or copy the device screenshot.</li>"
+                "<li><b>Live Graph</b> — real-time spectrum with up to 3 trace lines.</li>"
+                "</ul>"
+                "<b>Sweep value adjustment</b>"
+                "<br>If the device clamps a requested value (e.g. points capped at "
+                "the device maximum), a warning dialog will appear and the actual "
+                "applied values will be shown."
+                "<br><br>"
+                "<b>Trace statistics</b>"
+                "<br>Open with the Trace Stats button on the Trace tab. "
+                "Select a frequency sub-range and a display unit. "
+                "Available metrics: average power, median, min/max with "
+                "frequencies, channel power, occupied bandwidth (99% OBW), "
+                "PAPR, flatness, and field strength (with antenna factor)."
+                "<br><br>"
+                "<b>Keyboard shortcuts</b>"
+                "<ul>"
+                "<li><tt>Ctrl+Q</tt> — Quit</li>"
+                "</ul>"
+                "<b>Configuration files</b>"
+                "<br>Settings are loaded from "
+                "<tt>~/.config/tsanet/controller.yaml</tt> "
+                "and overridden by command-line flags when launching "
+                "<tt>tsanet-gui</tt>."
+            ),
+        )
+
+    # -- connection ---------------------------------------------------------
 
     def _show_connection_dialog(self):
         dlg = ConnectionDialog(self)
@@ -82,7 +165,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Connection Error", str(exc))
             return
 
-        # Rebuild device-dependent widgets
         central = self.centralWidget()
         if isinstance(central, QTabWidget):
             self._device_panel = DevicePanel(self._rpc)
@@ -100,46 +182,71 @@ class MainWindow(QMainWindow):
             self._refresh_sweep_status()
 
     def _on_tab_changed(self, index):
-        if index == self._SWEEP_TAB and self._rpc is not None:
+        if self._SWEEP_TAB == index and self._rpc is not None:
             self._refresh_sweep_status()
+            self._status.showMessage("Sweep tab — set range, center, span, or CW")
+        elif index == 0 and self._rpc is not None:
+            self._status.showMessage("Devices tab — click a device to select it")
+        elif index == 2 and self._rpc is not None:
+            self._status.showMessage("Trace tab — enable traces and open statistics")
+        elif index == 3 and self._rpc is not None:
+            self._status.showMessage("Capture tab — fetch a screenshot from the device")
+        elif index == 4 and self._rpc is not None:
+            self._status.showMessage(
+                "Live Graph — configurable trace lines, max-speed or fixed-interval updates"
+            )
 
-    # -- sweep panel -------------------------------------------------------
+    # -- sweep panel --------------------------------------------------------
 
     def _build_sweep_panel(self):
         w = QWidget()
         layout = QVBoxLayout(w)
 
-        # Range group
         range_group = QGroupBox("Range")
         form = QFormLayout()
         self._sw_start = QLineEdit("0")
+        self._sw_start.setToolTip("Sweep start frequency (e.g. 100mhz, 1.5ghz)")
+        self._sw_start.setPlaceholderText("e.g. 100mhz")
         self._sw_stop = QLineEdit("800mhz")
+        self._sw_stop.setToolTip("Sweep stop frequency (e.g. 800mhz, 1ghz)")
+        self._sw_stop.setPlaceholderText("e.g. 800mhz")
         self._sw_points = QLineEdit("450")
+        self._sw_points.setToolTip(
+            "Number of sweep points (device maximum is model-dependent, typically 450)"
+        )
         form.addRow("Start:", self._sw_start)
         form.addRow("Stop:", self._sw_stop)
         form.addRow("Points:", self._sw_points)
         range_group.setLayout(form)
 
-        # Center / Span / CW
         ctrl = QGroupBox("Control")
         ctrl_layout = QFormLayout()
         self._sw_center = QLineEdit()
+        self._sw_center.setToolTip("Center frequency — sets start/stop around this value")
+        self._sw_center.setPlaceholderText("e.g. 433.92mhz")
         self._sw_span = QLineEdit()
+        self._sw_span.setToolTip("Span width — sets start/stop symmetrically around center")
+        self._sw_span.setPlaceholderText("e.g. 200mhz")
         self._sw_cw = QLineEdit()
+        self._sw_cw.setPlaceholderText("e.g. 433.92mhz")
+        self._sw_cw.setToolTip("Continuous-wave (zero-span) frequency")
         ctrl_layout.addRow("Center:", self._sw_center)
         ctrl_layout.addRow("Span:", self._sw_span)
         ctrl_layout.addRow("CW:", self._sw_cw)
         ctrl.setLayout(ctrl_layout)
 
-        # Buttons
         btn = QHBoxLayout()
         apply_btn = QPushButton("Apply Range")
+        apply_btn.setToolTip("Set sweep start, stop, and points on the device")
         apply_btn.clicked.connect(self._apply_sweep_range)
         center_btn = QPushButton("Set Center")
+        center_btn.setToolTip("Set center frequency (updates start/stop)")
         center_btn.clicked.connect(self._apply_sweep_center)
         span_btn = QPushButton("Set Span")
+        span_btn.setToolTip("Set span width (updates start/stop symmetrically)")
         span_btn.clicked.connect(self._apply_sweep_span)
         cw_btn = QPushButton("Set CW")
+        cw_btn.setToolTip("Set continuous-wave (zero-span) frequency")
         cw_btn.clicked.connect(self._apply_sweep_cw)
         btn.addWidget(apply_btn)
         btn.addWidget(center_btn)
@@ -147,10 +254,11 @@ class MainWindow(QMainWindow):
         btn.addWidget(cw_btn)
 
         refresh_btn = QPushButton("Refresh")
+        refresh_btn.setToolTip("Read current sweep state back from the device")
         refresh_btn.clicked.connect(lambda: self._refresh_sweep_status())
 
-        # Status
         self._sweep_status = QLabel("")
+        self._sweep_status.setWordWrap(True)
 
         layout.addWidget(range_group)
         layout.addWidget(ctrl)
@@ -248,14 +356,12 @@ class MainWindow(QMainWindow):
                 t = int(parts[1])
                 c = (s + t) // 2
                 p = int(parts[2]) if len(parts) > 2 else None
-                # Update the input fields to reflect actual device state.
                 self._sw_start.setText(str(s))
                 self._sw_stop.setText(str(t))
                 self._sw_center.setText(str(c))
                 self._sw_span.setText(str(t - s))
                 if p is not None:
                     self._sw_points.setText(str(p))
-                # Status bar text.
                 text = f"Start: {_fmt(s)}  Stop: {_fmt(t)}  Center: {_fmt(c)}"
                 if p:
                     text += f"  Points: {p}"
@@ -264,10 +370,11 @@ class MainWindow(QMainWindow):
                     text += f"  WARNING: {warning}"
                     QMessageBox.warning(self, "Sweep value adjusted", warning)
                 self._sweep_status.setText(text)
+                self._status.showMessage(text)
         except Exception:
             self._sweep_status.setText("(readback failed)")
 
-    # -- trace panel -------------------------------------------------------
+    # -- trace panel --------------------------------------------------------
 
     def _build_trace_panel(self):
         w = QWidget()
@@ -276,20 +383,26 @@ class MainWindow(QMainWindow):
         group = QGroupBox("Trace")
         form = QFormLayout()
         self._trace_id = QLineEdit("1")
+        self._trace_id.setToolTip("Trace channel number (1-4 on tinySA Ultra)")
+        self._trace_id.setPlaceholderText("1")
         self._trace_calc = QLineEdit()
+        self._trace_calc.setToolTip("Calculation mode: minh, maxh, aver4, off, etc.")
+        self._trace_calc.setPlaceholderText("e.g. minh")
         form.addRow("ID:", self._trace_id)
         form.addRow("Calc:", self._trace_calc)
 
         btn = QHBoxLayout()
         on_btn = QPushButton("On")
+        on_btn.setToolTip("Enable the selected trace")
         on_btn.clicked.connect(lambda: self._trace_cmd("enable"))
         off_btn = QPushButton("Off")
+        off_btn.setToolTip("Disable the selected trace")
         off_btn.clicked.connect(lambda: self._trace_cmd("disable"))
         calc_btn = QPushButton("Set Calc")
+        calc_btn.setToolTip("Apply the calculation mode to the selected trace")
         calc_btn.clicked.connect(
             lambda: self._trace_cmd("enable_calc", calc=self._trace_calc.text() or "off")
         )
-        # actually need to not send empty calc
         btn.addWidget(on_btn)
         btn.addWidget(off_btn)
         btn.addWidget(calc_btn)
@@ -298,8 +411,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(group)
         layout.addLayout(btn)
 
-        # stats button
         stats_btn = QPushButton("Trace Stats...")
+        stats_btn.setToolTip(
+            "Open statistics dialog: average, median, min/max, channel power, "
+            "occupied bandwidth, PAPR, flatness, field strength"
+        )
         stats_btn.clicked.connect(self._open_stats)
         layout.addWidget(stats_btn)
         layout.addStretch()

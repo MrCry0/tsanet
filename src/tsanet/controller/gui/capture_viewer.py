@@ -1,4 +1,4 @@
-"""Screenshot capture viewer (brief 6.1, 10)."""
+"""Screenshot capture viewer."""
 
 from __future__ import annotations
 
@@ -32,12 +32,15 @@ class CaptureViewer(QWidget):
         scroll.setWidgetResizable(True)
 
         fetch_btn = QPushButton("Fetch")
+        fetch_btn.setToolTip("Request a screenshot from the device (PNG format)")
         fetch_btn.clicked.connect(self.fetch)
 
         save_btn = QPushButton("Save")
+        save_btn.setToolTip("Save the screenshot to a local PNG file")
         save_btn.clicked.connect(self.save_file)
 
         copy_btn = QPushButton("Copy")
+        copy_btn.setToolTip("Copy the screenshot to the system clipboard")
         copy_btn.clicked.connect(self.copy_to_clipboard)
 
         layout = QVBoxLayout(self)
