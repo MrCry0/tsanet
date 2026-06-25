@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Any
 
-from tsanet.common.errors import ConnectionClosed, SessionBusy
+from tsanet.common.errors import AuthenticationError, ConnectionClosed, SessionBusy
 from tsanet.device.discovery import list_serial_ports, open_serial_port
 from tsanet.hub.config import HubConfig
 from tsanet.hub.dispatcher import Dispatcher
@@ -20,7 +20,6 @@ from tsanet.hub.registry import DeviceRegistry, RegistryPoller
 from tsanet.hub.session import SessionManager
 from tsanet.hub.subscriptions import SubscriptionManager
 from tsanet.protocol.messages import Request, Response, Status
-from tsanet.protocol.security import NullSecurity
 from tsanet.protocol.transport import Connection, Listener, dial, listen
 
 logger = logging.getLogger("tsanet.hub")
@@ -52,15 +51,19 @@ class HubServer:
         Call :meth:`stop` from a signal handler to initiate shutdown.
         """
         logger.info(
-            "starting hub: mode=%s transport=%s",
+            "starting hub: mode=%s transport=%s security=%s",
             self._config.network.mode,
             self._config.network.transport,
+            self._config.security.mode,
         )
+        # Build the security provider before starting anything else, so a
+        # misconfigured/unimplemented mode fails fast with nothing to tear down.
+        security = self._config.security.build_provider()
+
         self._poller.start()
         logger.info("device poller started (interval=%.1fs)", self._config.poll_interval)
 
         endpoint = self._config.network.endpoint()
-        security = NullSecurity()
 
         if self._config.network.mode == "listen":
             self._listener = listen(endpoint, security)
@@ -92,12 +95,18 @@ class HubServer:
         while self._running:
             try:
                 connection = self._listener.accept()
-                logger.info("accepted connection")
-                threading.Thread(target=self._serve, args=(connection,), daemon=True).start()
+            except (AuthenticationError, ConnectionClosed) as exc:
+                # A peer failed the security handshake; reject and keep
+                # accepting rather than letting one bad client take the
+                # hub down.
+                logger.warning("rejected connection: %s", exc)
+                continue
             except OSError:
                 if self._running:
                     logger.exception("accept error")
                 break
+            logger.info("accepted connection")
+            threading.Thread(target=self._serve, args=(connection,), daemon=True).start()
 
     def _dial_loop(self, endpoint: Any, security: Any) -> None:
         while self._running:
@@ -105,9 +114,9 @@ class HubServer:
                 connection = dial(endpoint, security)
                 logger.info("connected to %s", self._describe(endpoint))
                 self._serve(connection)
-            except OSError:
+            except (OSError, AuthenticationError, ConnectionClosed):
                 if self._running:
-                    logger.debug("dial failed, retrying")
+                    logger.debug("dial failed, retrying", exc_info=True)
                     time.sleep(1)
             else:
                 if self._running:

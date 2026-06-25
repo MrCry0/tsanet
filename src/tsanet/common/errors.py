@@ -41,3 +41,15 @@ class SessionBusy(SessionError):
 
 class DispatchError(TsanetError):
     """An RPC request could not be routed or its arguments were invalid."""
+
+
+class SecurityError(TsanetError):
+    """A security provider rejected a connection or is misconfigured."""
+
+
+class AuthenticationError(SecurityError):
+    """The peer did not present a valid shared secret."""
+
+
+class SecurityNotImplementedError(SecurityError):
+    """The configured security mode has no provider implemented yet."""

@@ -14,6 +14,7 @@ from typing import Annotated, Optional
 import typer
 
 from tsanet.common.config import NetworkConfig
+from tsanet.common.errors import SecurityNotImplementedError
 from tsanet.hub.config import DEFAULT_CONFIG_PATH, HubConfig
 from tsanet.hub.server import HubServer
 
@@ -88,7 +89,11 @@ def run(
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
-    server.start()
+    try:
+        server.start()
+    except SecurityNotImplementedError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 def _configure_logging(level: str) -> None:

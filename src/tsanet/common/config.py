@@ -13,6 +13,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, model_validator
 
+from tsanet.common.errors import SecurityNotImplementedError
+from tsanet.protocol.security import NullSecurity, SecurityProvider, TokenSecurity
 from tsanet.protocol.transport import TCP, Endpoint
 
 
@@ -50,6 +52,24 @@ class SecurityConfig(BaseModel):
         if self.mode == "tls-token" and not (self.tls_cert and self.tls_key):
             raise ValueError("tls-token mode requires tls_cert and tls_key")
         return self
+
+    def build_provider(self) -> SecurityProvider:
+        """Construct the :class:`SecurityProvider` for this configuration.
+
+        Raises :class:`SecurityNotImplementedError` for modes that are
+        validated (so config files can specify them) but have no provider
+        implemented yet.
+        """
+        if self.mode == "none":
+            return NullSecurity()
+        if self.mode == "token":
+            assert self.token is not None  # enforced by _require_secrets
+            return TokenSecurity(self.token)
+        if self.mode == "tls-token":
+            raise SecurityNotImplementedError(
+                "security mode 'tls-token' is not implemented yet; use 'token' or 'none'"
+            )
+        raise AssertionError(f"unhandled security mode: {self.mode!r}")
 
 
 def load_yaml(path: str | Path | None) -> dict[str, Any]:

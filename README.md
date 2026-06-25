@@ -55,9 +55,13 @@ Phases 1–7 are implemented and tested:
   frequency parsing (1.5ghz, 250k, 433.92mhz), and unit-aware trace stats.
 - Controller GUI (`tsanet-gui`) with connection dialog, device panel, sweep
   controls, screenshot capture, live spectrum graph, and trace statistics.
+- Shared-secret token authentication (`security.mode: token`), checked right
+  after the connection is established, before any RPC traffic.
 
-Remaining: security hardening (token/TLS), packaging (PyInstaller), reconnect
-and idle-timeout logic, and integration tests against real hardware.
+Remaining: TLS (`tls-token` mode is accepted by config validation but the
+hub and controller refuse to start with a clear error until it is built),
+packaging (PyInstaller), reconnect and idle-timeout logic, and integration
+tests against real hardware.
 
 ## Installation
 
@@ -167,6 +171,28 @@ security:
   mode: none           # none | token | tls-token
   token: null
 ```
+
+### Security modes
+
+- `none` - no authentication or encryption. Fine on a trusted loopback or
+  Unix socket; the hub logs a warning if used over non-loopback TCP.
+- `token` - a shared secret checked immediately after the connection is
+  established, before any RPC traffic. Set the same `token` value in both
+  `hub.yaml` and `controller.yaml`:
+
+  ```yaml
+  security:
+    mode: token
+    token: a-long-random-shared-secret
+  ```
+
+  This authenticates the peer but does not encrypt traffic - combine with a
+  Unix socket or an SSH/VPN tunnel if the link isn't otherwise trusted. A
+  mismatched token is rejected on both ends without taking down the hub.
+- `tls-token` - TLS plus the token, for encryption over an untrusted network.
+  The config schema accepts it, but the hub and controller currently exit
+  immediately with `security mode 'tls-token' is not implemented yet` if
+  selected.
 
 ## Development
 

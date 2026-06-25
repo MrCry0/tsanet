@@ -13,7 +13,6 @@ from collections.abc import Callable
 from tsanet.common.errors import TransportError
 from tsanet.controller.config import ControllerConfig
 from tsanet.protocol.messages import Event, Request, Response, Status
-from tsanet.protocol.security import NullSecurity
 from tsanet.protocol.transport import Connection, Listener, dial, listen
 
 
@@ -51,7 +50,7 @@ class RpcClient:
     def connect(self) -> None:
         """Establish the network connection and start the reader thread."""
         endpoint = self._config.network.endpoint()
-        security = NullSecurity()
+        security = self._config.security.build_provider()
 
         if self._config.network.mode == "listen":
             self._listener = listen(endpoint, security)

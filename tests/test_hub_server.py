@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from tsanet.common.config import NetworkConfig, SecurityConfig
+from tsanet.common.errors import AuthenticationError
 from tsanet.hub.config import HubConfig
 from tsanet.hub.server import HubServer
 from tsanet.protocol.messages import Request, Response, Status
+from tsanet.protocol.security import TokenSecurity
 from tsanet.protocol.transport import Endpoint, TCP, dial
 
 
-def _tcp_config(mode="listen", port=0):
+def _tcp_config(mode="listen", port=0, security=None):
     return HubConfig(
         network=NetworkConfig(mode=mode, transport="tcp", address="127.0.0.1", port=port),
-        security=SecurityConfig(),
+        security=security or SecurityConfig(),
         poll_interval=60.0,
     )
 
@@ -31,8 +35,8 @@ class _ReadyServer(HubServer):
         super()._accept_loop()
 
 
-def _start_server():
-    config = _tcp_config(port=0)
+def _start_server(config=None):
+    config = config or _tcp_config(port=0)
     server = _ReadyServer(config)
     t = threading.Thread(target=server.start, daemon=True)
     t.start()
@@ -164,3 +168,33 @@ class TestHubServer:
         config = _tcp_config(mode="dial", port=0)
         server = HubServer(config)
         assert server is not None
+
+
+class TestHubServerTokenSecurity:
+    def test_matching_token_connects(self):
+        config = _tcp_config(security=SecurityConfig(mode="token", token="shared-secret"))
+        server, port = _start_server(config)
+        try:
+            conn = dial(Endpoint(TCP, "127.0.0.1", port), TokenSecurity("shared-secret"))
+            conn.send(Request(id=1, domain="session", op="status"))
+            resp = conn.recv()
+            assert resp.status == Status.OK
+            conn.close()
+        finally:
+            server.stop()
+
+    def test_mismatched_token_is_rejected_without_crashing_hub(self):
+        config = _tcp_config(security=SecurityConfig(mode="token", token="shared-secret"))
+        server, port = _start_server(config)
+        try:
+            with pytest.raises(AuthenticationError):
+                dial(Endpoint(TCP, "127.0.0.1", port), TokenSecurity("wrong-secret"))
+
+            # The hub must still be alive and accepting good connections.
+            conn = dial(Endpoint(TCP, "127.0.0.1", port), TokenSecurity("shared-secret"))
+            conn.send(Request(id=1, domain="session", op="status"))
+            resp = conn.recv()
+            assert resp.status == Status.OK
+            conn.close()
+        finally:
+            server.stop()

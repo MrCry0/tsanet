@@ -14,6 +14,7 @@ from typing import Annotated, Optional
 import typer
 
 from tsanet.common.config import NetworkConfig
+from tsanet.common.errors import AuthenticationError, SecurityNotImplementedError
 from tsanet.controller.config import DEFAULT_CONFIG_PATH, ControllerConfig
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient, RpcError
@@ -79,7 +80,11 @@ def _setup(
         config.network.port = port
     NetworkConfig.model_validate(config.network.__dict__)
     _client = RpcClient(config)
-    _client.connect()
+    try:
+        _client.connect()
+    except (SecurityNotImplementedError, AuthenticationError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 # -- devices ---------------------------------------------------------------
