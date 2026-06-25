@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from tsanet.common.errors import CommandRejected
 from tsanet.device.commands import (
     capture,
     device,
@@ -113,6 +114,17 @@ def test_set_unit_rejects_invalid_unit():
 def test_menu_trigger_requires_ids():
     with pytest.raises(ValueError):
         menu.trigger(TinySA(FakeSerial([b"ch> "])), [])
+
+
+def test_trace_enable_rejects_out_of_range_id():
+    # The device has no error code for an out-of-range trace id: it replies
+    # with the command's usage text instead of enabling anything, and that
+    # must surface as an error rather than a silent "success".
+    usage = b"trace {dBm|dBmV|dBuV|RAW|V|Vpp|W}\r\ntrace [{trace#}] view {trace#}|off|on"
+    port = FakeSerial([b"trace 21 view on\r\n" + usage + b"\r\nch> "])
+
+    with pytest.raises(CommandRejected):
+        trace.enable(TinySA(port), 21)
 
 
 def test_capture_fetches_model_sized_framebuffer():

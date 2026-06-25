@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from tsanet.common.errors import DeviceTimeout, ProtocolError
+from tsanet.common.errors import CommandRejected, DeviceTimeout, ProtocolError
 
 #: Shell prompt that terminates every device response.
 PROMPT = b"ch> "
@@ -45,7 +45,9 @@ class TinySA:
     def send(self, command: str) -> str:
         """Send a command and return its text response, framing stripped."""
         raw = self._exchange(command, self._read_text_response)
-        return self._strip(command, raw)
+        body = self._strip(command, raw)
+        _check_for_rejection(command, body)
+        return body
 
     def send_binary(self, command: str, expected_len: int) -> bytes:
         """Send a command and return ``expected_len`` bytes of binary payload.
@@ -105,3 +107,16 @@ class TinySA:
         if body.startswith(echo):
             body = body[len(echo) :]
         return body.strip(b"\r\n").decode("ascii", errors="replace")
+
+
+def _check_for_rejection(command: str, body: str) -> None:
+    """Raise if *body* looks like tinySA's usage text rather than real output.
+
+    The firmware has no error code for a bad argument (out-of-range trace
+    or marker id, unknown calc type, ...): it echoes the command's usage
+    grammar instead of performing the action. That grammar always contains
+    ``{``/``}`` placeholders, or is explicitly prefixed with ``usage:`` --
+    neither of which appears in any normal data response.
+    """
+    if body and ("{" in body or body.lstrip().lower().startswith("usage:")):
+        raise CommandRejected(f"device rejected {command!r}: {body}")

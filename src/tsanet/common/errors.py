@@ -19,6 +19,16 @@ class ProtocolError(DeviceError):
     """The device response did not match the expected wire format."""
 
 
+class CommandRejected(DeviceError):
+    """The device reported the command's arguments as invalid.
+
+    tinySA firmware does not return a wire-level error code for a bad
+    argument (e.g. an out-of-range trace or marker id) -- it replies with
+    the command's usage text instead of performing the action, and that
+    usage text is otherwise indistinguishable from a normal response.
+    """
+
+
 class TransportError(TsanetError):
     """A network transport or wire-protocol failure."""
 

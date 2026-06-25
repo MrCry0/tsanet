@@ -4,8 +4,31 @@ from __future__ import annotations
 
 import pytest
 
-from tsanet.common.errors import DeviceTimeout, ProtocolError
+from tsanet.common.errors import CommandRejected, DeviceTimeout, ProtocolError
 from tsanet.device.transport import TinySA
+
+
+def test_send_raises_on_usage_text_response(fake_serial):
+    # tinySA has no error code for a bad argument (e.g. an out-of-range
+    # trace id): it echoes the command's usage grammar instead of acting
+    # on it, and that must not be mistaken for a successful empty response.
+    usage = (
+        b"trace {dBm|dBmV|dBuV|RAW|V|Vpp|W}\r\n"
+        b"trace [{trace#}] {copy|freeze|subtract|view|value} {trace#}|off|on"
+    )
+    port = fake_serial([b"trace 21 view on\r\n" + usage + b"\r\nch> "])
+    tx = TinySA(port)
+
+    with pytest.raises(CommandRejected):
+        tx.send("trace 21 view on")
+
+
+def test_send_raises_on_usage_prefixed_response(fake_serial):
+    port = fake_serial([b"calc 1 bogus\r\nusage: calc [{trace#}] off|minh|maxh\r\nch> "])
+    tx = TinySA(port)
+
+    with pytest.raises(CommandRejected):
+        tx.send("calc 1 bogus")
 
 
 def test_send_strips_echo_and_prompt(fake_serial):
