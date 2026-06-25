@@ -156,6 +156,7 @@ class HubServer:
         while self._running:
             msg = connection.recv()
             if isinstance(msg, Request):
+                logger.debug("RX req #%d: %s.%s", msg.id, msg.domain, msg.op)
                 resp = self._dispatcher.dispatch(msg, connection)
                 connection.send(resp)
             else:

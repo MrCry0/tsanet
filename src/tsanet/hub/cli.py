@@ -22,6 +22,7 @@ except ImportError:
 
 from tsanet.common.config import NetworkConfig
 from tsanet.common.errors import SecurityNotImplementedError
+from tsanet.common.logging import configure as configure_logging
 from tsanet.hub.config import DEFAULT_CONFIG_PATH, HubConfig
 from tsanet.hub.server import HubServer
 
@@ -32,6 +33,24 @@ logger = logging.getLogger("tsanet.hub")
 def main() -> None:
     """Run the tsanet hub (Typer entry point for the console script)."""
     app()
+
+
+def _resolve_log_level(
+    verbose: bool,
+    debug: bool,
+    log_level: str,
+) -> int:
+    """Resolve effective log level from flags.
+    Priority: --debug > --verbose > --log-level > default (WARNING).
+    """
+    if debug:
+        return logging.DEBUG
+    if verbose:
+        return logging.INFO
+    try:
+        return getattr(logging, log_level.upper())
+    except AttributeError:
+        return logging.WARNING
 
 
 @app.command()
@@ -60,19 +79,30 @@ def run(
         Optional[float],
         typer.Option("--poll-interval", help="Device hotplug scan interval (seconds)"),
     ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Show informational messages"),
+    ] = False,
+    debug: Annotated[
+        bool,
+        typer.Option("--debug", help="Show detailed debug output (implies --verbose)"),
+    ] = False,
     log_level: Annotated[
         str,
-        typer.Option("--log-level", help="Log level: debug, info, warning, error"),
-    ] = "info",
+        typer.Option(
+            "--log-level",
+            help="Log level: debug, info, warning, error (overridden by --verbose/--debug)",
+        ),
+    ] = "warning",
 ) -> None:
-    _configure_logging(log_level)
+    level = _resolve_log_level(verbose, debug, log_level)
+    configure_logging(level)
 
     config = HubConfig.load(config_path or DEFAULT_CONFIG_PATH)
 
     if config_path is None and not DEFAULT_CONFIG_PATH.exists():
         logger.info("no config file found at %s, using defaults", DEFAULT_CONFIG_PATH)
 
-    # CLI flags override config values.
     if mode is not None:
         config.network.mode = mode  # type: ignore[assignment]
     if transport is not None:
@@ -84,7 +114,6 @@ def run(
     if poll_interval is not None:
         config.poll_interval = poll_interval
 
-    # Re-validate after overrides (TCP needs a port).
     NetworkConfig.model_validate(config.network.__dict__)
 
     server = HubServer(config)
@@ -101,14 +130,6 @@ def run(
     except SecurityNotImplementedError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-
-
-def _configure_logging(level: str) -> None:
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        stream=sys.stderr,
-    )
 
 
 if __name__ == "__main__":

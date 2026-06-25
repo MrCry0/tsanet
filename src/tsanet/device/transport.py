@@ -4,11 +4,12 @@ Ported from ``go-tinysa/protocol.go``. The device echoes every command back,
 then emits the response, then a ``ch> `` prompt. String responses end with
 ``\\r\\nch> ``; binary responses (``capture``) end with just ``ch> `` and no
 preceding newline. The device occasionally emits malformed output right after
-boot, so reads that do not reach the prompt are retried (brief 4).
+boot, so reads that do not reach the prompt are retried.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol, runtime_checkable
 
 from tsanet.common.errors import CommandRejected, DeviceTimeout, ProtocolError
@@ -18,6 +19,8 @@ PROMPT = b"ch> "
 
 #: Line terminator sent after each command.
 LINE_TERMINATOR = b"\r"
+
+logger = logging.getLogger("tsanet.device")
 
 
 @runtime_checkable
@@ -44,8 +47,10 @@ class TinySA:
 
     def send(self, command: str) -> str:
         """Send a command and return its text response, framing stripped."""
+        logger.debug("TX: %r", command)
         raw = self._exchange(command, self._read_text_response)
         body = self._strip(command, raw)
+        logger.debug("RX: %r -> %r", command, body)
         _check_for_rejection(command, body)
         return body
 
@@ -55,6 +60,7 @@ class TinySA:
         Used for ``capture``, whose payload may contain bytes that look like
         the prompt, so the length is known up front rather than scanned for.
         """
+        logger.debug("TX binary: %r (expect %d bytes)", command, expected_len)
 
         def read_binary() -> bytes:
             self._port.read_until(b"\n")  # consume the echoed command line
@@ -64,10 +70,13 @@ class TinySA:
                 raise ProtocolError(f"expected prompt after binary payload, got {prompt!r}")
             return payload
 
-        return self._exchange(command, read_binary)
+        result = self._exchange(command, read_binary)
+        logger.debug("RX binary: %r -> %d bytes", command, len(result))
+        return result
 
     def write_only(self, command: str) -> None:
         """Send a command without waiting for a prompt (e.g. ``reset``)."""
+        logger.debug("TX write-only: %r", command)
         self._port.reset_input_buffer()
         self._port.write(command.encode("ascii") + LINE_TERMINATOR)
 

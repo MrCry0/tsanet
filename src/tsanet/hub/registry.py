@@ -13,6 +13,7 @@ surface.
 
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass, field
 
@@ -20,6 +21,8 @@ from tsanet.common.errors import DeviceError
 from tsanet.device.discovery import PortLister, PortOpener, probe
 from tsanet.device.model import DeviceInfo
 from tsanet.device.transport import SerialPort, TinySA
+
+logger = logging.getLogger("tsanet.hub.registry")
 
 
 @dataclass
@@ -55,12 +58,19 @@ class DeviceRegistry:
         present = set(self._list_ports())
         with self._lock:
             known = set(self._devices)
+            added, removed = set(), set()
             for port in present - known:
                 device = self._probe_port(port)
                 if device is not None:
                     self._devices[port] = device
+                    added.add(port)
             for port in known - present:
                 self._drop(port)
+                removed.add(port)
+        if added:
+            logger.info("devices added: %s", ", ".join(sorted(added)))
+        if removed:
+            logger.info("devices removed: %s", ", ".join(sorted(removed)))
 
     def list(self) -> list[RegisteredDevice]:
         """Return the indexed devices, ordered by port."""

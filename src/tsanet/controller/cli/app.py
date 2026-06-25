@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import datetime
 import io
+import logging
 import sys
 from pathlib import Path
 from typing import Annotated, Optional
@@ -23,6 +24,7 @@ except ImportError:
 
 from tsanet.common.config import NetworkConfig
 from tsanet.common.errors import AuthenticationError, ConnectionClosed, SecurityNotImplementedError
+from tsanet.common.logging import configure as configure_logging
 from tsanet.controller.config import DEFAULT_CONFIG_PATH, ControllerConfig
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient, RpcError
@@ -31,6 +33,7 @@ from tsanet.device.model import VALID_CALC, VALID_UNITS
 
 app = typer.Typer(no_args_is_help=True)
 _client: RpcClient | None = None
+_log = logging.getLogger("tsanet.ctl")
 
 
 def _rpc() -> RpcClient:
@@ -40,9 +43,14 @@ def _rpc() -> RpcClient:
 
 
 def _call(domain: str, op: str, **args: object) -> object:
+    _log.info("RPC %s.%s args=%s", domain, op, args)
+    _log.debug("sending RPC %s.%s", domain, op)
     try:
-        return _rpc().call(domain, op, **args)
+        result = _rpc().call(domain, op, **args)
+        _log.debug("RPC %s.%s -> %r", domain, op, result)
+        return result
     except RpcError as exc:
+        _log.error("RPC error %s.%s: %s", domain, op, exc)
         raise typer.Exit(str(exc)) from exc
 
 
@@ -58,6 +66,14 @@ def _freq(raw: str) -> int:
 
 
 # -- callback --------------------------------------------------------------
+
+
+def _resolve_log_level(verbose: bool, debug: bool) -> int:
+    if debug:
+        return logging.DEBUG
+    if verbose:
+        return logging.INFO
+    return logging.WARNING
 
 
 @app.callback()
@@ -90,8 +106,18 @@ def _setup(
             help="Device ID to select on a hub with more than one device attached",
         ),
     ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Show informational messages"),
+    ] = False,
+    debug: Annotated[
+        bool,
+        typer.Option("--debug", help="Show detailed debug output (implies --verbose)"),
+    ] = False,
 ) -> None:
     global _client
+    configure_logging(_resolve_log_level(verbose, debug))
+
     config = ControllerConfig.load(config_path or DEFAULT_CONFIG_PATH)
     if mode is not None:
         config.network.mode = mode  # type: ignore[assignment]
@@ -102,12 +128,23 @@ def _setup(
     if port is not None:
         config.network.port = port
     NetworkConfig.model_validate(config.network.__dict__)
+
+    _log.info(
+        "connecting to hub: mode=%s transport=%s address=%s",
+        config.network.mode,
+        config.network.transport,
+        config.network.address,
+    )
+
     _client = RpcClient(config)
     try:
         _client.connect()
+        _log.info("connected to hub")
         if device is not None:
+            _log.info("selecting device: %s", device)
             _client.call("devices", "select", device_id=device)
     except (SecurityNotImplementedError, AuthenticationError, ConnectionClosed, RpcError) as exc:
+        _log.error("connection failed: %s", exc)
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     except OSError as exc:
@@ -116,6 +153,7 @@ def _setup(
             if config.network.transport == "tcp"
             else config.network.address
         )
+        _log.error("could not reach %s: %s", where, exc)
         typer.echo(f"error: could not reach {where}: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 

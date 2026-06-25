@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+from logging import LogRecord
+
+from PySide6.QtCore import Qt, QObject, Signal, Slot
 from PySide6.QtWidgets import (
+    QDockWidget,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -10,6 +15,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QStatusBar,
     QTabWidget,
@@ -27,6 +33,23 @@ from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient
 
 
+class _LogBridge(QObject):
+    """Bridges logging records from any thread to the GUI thread."""
+
+    record_ready = Signal(str)
+
+
+class _LogHandler(logging.Handler):
+    """Sends log records to a QPlainTextEdit via a signal bridge."""
+
+    def __init__(self, bridge: _LogBridge, level: int = logging.NOTSET) -> None:
+        super().__init__(level)
+        self._bridge = bridge
+
+    def emit(self, record: LogRecord) -> None:
+        self._bridge.record_ready.emit(self.format(record))
+
+
 class MainWindow(QMainWindow):
     def __init__(self, config=None):
         super().__init__()
@@ -38,6 +61,7 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._status)
         self._status.showMessage("Not connected — open File > Connect or restart to connect")
 
+        self._build_log_dock()
         self._build_menu()
 
         tabs = QTabWidget()
@@ -63,6 +87,48 @@ class MainWindow(QMainWindow):
         else:
             self._show_connection_dialog()
 
+    # -- log dock ------------------------------------------------------------
+
+    def _build_log_dock(self) -> None:
+        self._log_widget = QPlainTextEdit()
+        self._log_widget.setReadOnly(True)
+        self._log_widget.setMaximumBlockCount(2000)
+        self._log_widget.setTabChangesFocus(False)
+        self._log_widget.setStyleSheet(
+            "QPlainTextEdit { font-family: monospace; font-size: 11px; }"
+        )
+
+        dock = QDockWidget("Log", self)
+        dock.setWidget(self._log_widget)
+        dock.setAllowedAreas(
+            Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        dock.hide()
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
+        self._log_dock = dock
+
+        bridge = _LogBridge()
+        bridge.record_ready.connect(self._append_log)
+
+        handler = _LogHandler(bridge)
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(levelname)-5s] %(name)s: %(message)s", "%H:%M:%S")
+        )
+        handler.setLevel(logging.INFO)
+        logging.getLogger("tsanet").addHandler(handler)
+        self._log_handler = handler
+
+    @Slot(str)
+    def _append_log(self, text: str) -> None:
+        self._log_widget.appendPlainText(text)
+
+    def _toggle_log(self) -> None:
+        self._log_dock.setVisible(not self._log_dock.isVisible())
+        if self._log_dock.isVisible():
+            self._log_handler.setLevel(logging.DEBUG)
+        else:
+            self._log_handler.setLevel(logging.INFO)
+
     # -- menu ---------------------------------------------------------------
 
     def _build_menu(self):
@@ -73,6 +139,11 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         quit_act = file_menu.addAction("&Quit")
         quit_act.triggered.connect(self.close)
+
+        view_menu = menu.addMenu("&View")
+        log_act = view_menu.addAction("&Log")
+        log_act.setCheckable(True)
+        log_act.triggered.connect(self._toggle_log)
 
         help_menu = menu.addMenu("&Help")
         help_menu.addAction("Usage &Guide", self._show_guide)

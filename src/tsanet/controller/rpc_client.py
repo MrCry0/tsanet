@@ -1,4 +1,4 @@
-"""RPC client for communicating with a tsanet hub (brief 2, 9, 11.6).
+"""RPC client for communicating with a tsanet hub.
 
 A background reader thread continuously reads messages from the connection.
 Responses are matched to pending ``call()`` invocations via a condition
@@ -7,13 +7,17 @@ variable; ``Event`` messages are dispatched to the registered callback.
 
 from __future__ import annotations
 
+import logging
 import threading
+import time
 from collections.abc import Callable
 
 from tsanet.common.errors import TransportError
 from tsanet.controller.config import ControllerConfig
 from tsanet.protocol.messages import Event, Request, Response, Status
 from tsanet.protocol.transport import Connection, Listener, dial, listen
+
+logger = logging.getLogger("tsanet.rpc")
 
 
 class RpcError(TransportError):
@@ -51,16 +55,22 @@ class RpcClient:
         """Establish the network connection and start the reader thread."""
         endpoint = self._config.network.endpoint()
         security = self._config.security.build_provider()
+        logger.debug(
+            "connecting: mode=%s transport=%s", self._config.network.mode, endpoint.transport
+        )
 
         if self._config.network.mode == "listen":
             self._listener = listen(endpoint, security)
+            logger.debug("listening, waiting for hub to connect")
             self._connection = self._listener.accept()
         else:
             self._connection = dial(endpoint, security)
 
+        logger.info("connection established to hub")
         self._running = True
         self._reader = threading.Thread(target=self._reader_loop, daemon=True)
         self._reader.start()
+        logger.debug("reader thread started")
 
     def close(self) -> None:
         """Stop the reader thread and close the connection."""
@@ -101,12 +111,18 @@ class RpcClient:
                 raise TransportError("not connected")
             req_id = self._next_id
             self._next_id += 1
-            conn.send(Request(id=req_id, domain=domain, op=op, args=args))
+            req = Request(id=req_id, domain=domain, op=op, args=args)
+            logger.debug("TX req #%d: %s.%s args=%s", req_id, domain, op, args)
+            t0 = time.monotonic()
+            conn.send(req)
 
         with self._pending_cond:
             while req_id not in self._pending:
                 self._pending_cond.wait()
             result = self._pending.pop(req_id)
+
+        elapsed = (time.monotonic() - t0) * 1000
+        logger.debug("RX req #%d: %.1f ms", req_id, elapsed)
 
         if isinstance(result, Exception):
             raise result
@@ -115,23 +131,35 @@ class RpcClient:
     # -- reader ------------------------------------------------------------
 
     def _reader_loop(self) -> None:
+        logger.debug("reader loop started")
         while self._running:
             try:
                 msg = self._connection.recv()  # type: ignore[union-attr]
             except Exception as exc:
                 if self._running:
+                    logger.debug("reader loop error: %s", exc)
                     self._dispatch_error(exc)
                 break
 
             if isinstance(msg, Response):
+                logger.debug(
+                    "RX resp #%d: status=%s error=%s data=%r",
+                    msg.id,
+                    msg.status.name,
+                    msg.error,
+                    msg.data,
+                )
                 self._dispatch_response(msg)
             elif isinstance(msg, Event):
+                logger.debug("RX event: %s.%s", msg.domain, msg.op)
                 cb = self._event_cb
                 if cb is not None:
                     try:
                         cb(msg)
                     except Exception:
                         pass
+
+        logger.debug("reader loop stopped")
 
     def _dispatch_response(self, resp: Response) -> None:
         with self._pending_cond:

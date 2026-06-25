@@ -1,14 +1,13 @@
-"""RPC dispatcher that routes incoming requests to device commands (brief 5, 11.5).
+"""RPC dispatcher that routes incoming requests to device commands.
 
-Maps the RPC domain API (brief section 5) to the device command functions in
+Maps the RPC domain API to the device command functions in
 :mod:`tsanet.device.commands`. Session and device management RPCs are handled
 directly against the registry and session manager.
 """
 
 from __future__ import annotations
 
-from __future__ import annotations
-
+import logging
 from typing import TYPE_CHECKING
 
 from tsanet.common.errors import DispatchError, SessionError
@@ -34,6 +33,8 @@ from tsanet.protocol.transport import Connection
 if TYPE_CHECKING:
     from tsanet.hub.subscriptions import SubscriptionManager
 
+logger = logging.getLogger("tsanet.hub.dispatcher")
+
 
 class Dispatcher:
     """Routes incoming RPC requests to device commands and hub services."""
@@ -51,10 +52,19 @@ class Dispatcher:
     # -- public API --------------------------------------------------------
 
     def dispatch(self, request: Request, connection: Connection) -> Response:
+        logger.debug(
+            "dispatch req #%d: %s.%s args=%s",
+            request.id,
+            request.domain,
+            request.op,
+            request.args,
+        )
         try:
             data = self._route(request, connection)
+            logger.debug("dispatch req #%d: OK data=%r", request.id, data)
             return Response(id=request.id, status=Status.OK, data=data)
         except Exception as exc:
+            logger.error("dispatch req #%d: ERROR %s", request.id, exc)
             return Response(id=request.id, status=Status.ERROR, error=str(exc))
 
     # -- top-level routing -------------------------------------------------

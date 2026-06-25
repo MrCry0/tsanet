@@ -11,6 +11,7 @@ differ from the previously sent set (e.g. the sweep range changed).
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 
@@ -22,6 +23,8 @@ from tsanet.hub.registry import DeviceRegistry
 from tsanet.hub.session import SessionManager
 from tsanet.protocol.messages import Event
 from tsanet.protocol.transport import Connection
+
+logger = logging.getLogger("tsanet.hub.subscriptions")
 
 
 class SubscriptionManager:
@@ -59,11 +62,14 @@ class SubscriptionManager:
             sub = Subscription(device.transport, session.connection, ids, interval, sub_id)
             sub.start()
             self._active = sub
+            logger.info("subscription #%d started: ids=%s interval=%s", sub_id, ids, interval)
             return {"subscription_id": sub_id, "active": True}
 
     def unsubscribe(self) -> dict:
         """Stop the active subscription, if any."""
         with self._lock:
+            if self._active is not None:
+                logger.info("subscription #%d stopped", self._active._subscription_id)
             self._stop_locked()
             return {"active": False}
 
