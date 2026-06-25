@@ -42,6 +42,13 @@ def _die(msg: str) -> typer.Exit:
     raise typer.Exit(msg)
 
 
+def _freq(raw: str) -> int:
+    try:
+        return parse_frequency(raw)
+    except ValueError as exc:
+        raise typer.Exit(str(exc)) from exc
+
+
 # -- callback --------------------------------------------------------------
 
 
@@ -197,7 +204,7 @@ def sweep_status() -> None:
 @sweep_app.command(name="start")
 def sweep_start(hz: Annotated[str, typer.Argument(help="Start frequency (e.g. 100mhz)")]) -> None:
     """Set sweep start frequency."""
-    freq = parse_frequency(hz)
+    freq = _freq(hz)
     _call("sweep", "set_start", hz=freq)
     typer.echo(f"start = {_fmt_hz(freq)}")
 
@@ -205,7 +212,7 @@ def sweep_start(hz: Annotated[str, typer.Argument(help="Start frequency (e.g. 10
 @sweep_app.command(name="stop")
 def sweep_stop(hz: Annotated[str, typer.Argument(help="Stop frequency")]) -> None:
     """Set sweep stop frequency."""
-    freq = parse_frequency(hz)
+    freq = _freq(hz)
     _call("sweep", "set_stop", hz=freq)
     typer.echo(f"stop = {_fmt_hz(freq)}")
 
@@ -213,7 +220,7 @@ def sweep_stop(hz: Annotated[str, typer.Argument(help="Stop frequency")]) -> Non
 @sweep_app.command(name="center")
 def sweep_center(hz: Annotated[str, typer.Argument(help="Center frequency")]) -> None:
     """Set sweep center frequency."""
-    freq = parse_frequency(hz)
+    freq = _freq(hz)
     _call("sweep", "set_center", hz=freq)
     typer.echo(f"center = {_fmt_hz(freq)}")
 
@@ -221,7 +228,7 @@ def sweep_center(hz: Annotated[str, typer.Argument(help="Center frequency")]) ->
 @sweep_app.command(name="span")
 def sweep_span(hz: Annotated[str, typer.Argument(help="Span")]) -> None:
     """Set sweep span."""
-    freq = parse_frequency(hz)
+    freq = _freq(hz)
     _call("sweep", "set_span", hz=freq)
     typer.echo(f"span = {_fmt_hz(freq)}")
 
@@ -229,7 +236,7 @@ def sweep_span(hz: Annotated[str, typer.Argument(help="Span")]) -> None:
 @sweep_app.command(name="cw")
 def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency")]) -> None:
     """Set sweep to continuous-wave mode at a frequency."""
-    freq = parse_frequency(hz)
+    freq = _freq(hz)
     _call("sweep", "set_cw", hz=freq)
     typer.echo(f"cw = {_fmt_hz(freq)}")
 
@@ -243,8 +250,8 @@ def sweep_range(
     ] = None,
 ) -> None:
     """Set sweep start, stop, and optionally point count."""
-    s = parse_frequency(start)
-    t = parse_frequency(stop)
+    s = _freq(start)
+    t = _freq(stop)
     _call("sweep", "set_start_stop", start=s, stop=t, points=points)
     extra = f" ({points} pts)" if points else ""
     typer.echo(f"range = {_fmt_hz(s)} - {_fmt_hz(t)}{extra}")
@@ -315,7 +322,7 @@ def marker_freq(
     hz: Annotated[str, typer.Argument(help="Frequency")],
 ) -> None:
     """Set marker frequency."""
-    _call("marker", "set_freq", id=marker_id, hz=parse_frequency(hz))
+    _call("marker", "set_freq", id=marker_id, hz=_freq(hz))
     typer.echo(f"marker {marker_id} -> {hz}")
 
 
@@ -519,8 +526,8 @@ def trace_stats(
     unit: Annotated[str, typer.Option("--unit", "-u", help="Trace unit (dBm, dBmV, ...)")] = "dBm",
 ) -> None:
     """Compute statistics over a frequency sub-range."""
-    start_hz = parse_frequency(start)
-    stop_hz = parse_frequency(stop)
+    start_hz = _freq(start)
+    stop_hz = _freq(stop)
 
     data = _call("trace", "fetch_data", ids=[trace_id])
     freqs = data["frequencies"]
