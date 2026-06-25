@@ -14,7 +14,7 @@ from typing import Annotated, Optional
 import typer
 
 from tsanet.common.config import NetworkConfig
-from tsanet.common.errors import AuthenticationError, SecurityNotImplementedError
+from tsanet.common.errors import AuthenticationError, ConnectionClosed, SecurityNotImplementedError
 from tsanet.controller.config import DEFAULT_CONFIG_PATH, ControllerConfig
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient, RpcError
@@ -99,11 +99,16 @@ def _setup(
         _client.connect()
         if device is not None:
             _client.call("devices", "select", device_id=device)
-    except (SecurityNotImplementedError, AuthenticationError) as exc:
+    except (SecurityNotImplementedError, AuthenticationError, ConnectionClosed, RpcError) as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    except RpcError as exc:
-        typer.echo(f"error: {exc}", err=True)
+    except OSError as exc:
+        where = (
+            f"{config.network.address}:{config.network.port}"
+            if config.network.transport == "tcp"
+            else config.network.address
+        )
+        typer.echo(f"error: could not reach {where}: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
 

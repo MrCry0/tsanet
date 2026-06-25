@@ -113,3 +113,26 @@ def test_no_device_option_skips_select(monkeypatch):
     )
     client = _FakeRpcClient.instances[-1]
     assert client.calls == []
+
+
+class _RefusingRpcClient(_FakeRpcClient):
+    """Simulates dial() hitting an unreachable hub (ECONNREFUSED)."""
+
+    def connect(self) -> None:
+        raise ConnectionRefusedError(111, "Connection refused")
+
+
+def test_setup_reports_unreachable_hub_cleanly(monkeypatch, capsys):
+    """An unreachable hub must report a clean message, not a raw traceback."""
+    monkeypatch.setattr(cli_app, "RpcClient", _RefusingRpcClient)
+    with pytest.raises(typer.Exit) as exc_info:
+        cli_app._setup(
+            config_path=None,
+            mode="dial",
+            transport="tcp",
+            address="127.0.0.1",
+            port=17999,
+            device=None,
+        )
+    assert exc_info.value.exit_code == 1
+    assert "could not reach 127.0.0.1:17999" in capsys.readouterr().err
