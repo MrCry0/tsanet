@@ -52,11 +52,34 @@ def test_sweep_range_reports_device_clamped_points(monkeypatch, capsys):
     assert "900" not in out
 
 
+def test_sweep_range_warns_when_points_clamped(monkeypatch, capsys):
+    monkeypatch.setattr(cli_app, "_call", _fake_sweep_call("2400000000 2490000000 450"))
+    cli_app.sweep_range(start="2400mhz", stop="2490mhz", points=900)
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert "900" in err and "450" in err
+
+
+def test_sweep_range_no_warning_when_points_match(monkeypatch, capsys):
+    monkeypatch.setattr(cli_app, "_call", _fake_sweep_call("2400000000 2490000000 450"))
+    cli_app.sweep_range(start="2400mhz", stop="2490mhz", points=450)
+    assert capsys.readouterr().err == ""
+
+
 def test_sweep_start_reports_actual_queried_value(monkeypatch, capsys):
     monkeypatch.setattr(cli_app, "_call", _fake_sweep_call("433000000 868000000"))
     cli_app.sweep_start(hz="100mhz")
     out = capsys.readouterr().out
     assert "433" in out
+
+
+def test_sweep_start_warns_when_clamped_to_device_minimum(monkeypatch, capsys):
+    # Requested 1 Hz but the device floors to its actual minimum start.
+    monkeypatch.setattr(cli_app, "_call", _fake_sweep_call("100000 868000000"))
+    cli_app.sweep_start(hz="1hz")
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert "start" in err.lower()
 
 
 def test_sweep_state_raises_cleanly_on_unparseable_response(monkeypatch):

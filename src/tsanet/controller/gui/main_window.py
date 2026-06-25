@@ -175,7 +175,7 @@ class MainWindow(QMainWindow):
             t = parse_frequency(self._sw_stop.text())
             p = int(self._sw_points.text()) if self._sw_points.text() else None
             self._call("sweep", "set_start_stop", start=s, stop=t, points=p)
-            self._refresh_sweep_status()
+            self._refresh_sweep_status(requested={"start": s, "stop": t, "points": p})
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
 
@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
                 return
             hz = parse_frequency(self._sw_center.text())
             self._call("sweep", "set_center", hz=hz)
-            self._refresh_sweep_status()
+            self._refresh_sweep_status(requested={"center": hz})
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
 
@@ -195,7 +195,7 @@ class MainWindow(QMainWindow):
                 return
             hz = parse_frequency(self._sw_span.text())
             self._call("sweep", "set_span", hz=hz)
-            self._refresh_sweep_status()
+            self._refresh_sweep_status(requested={"span": hz})
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
 
@@ -205,11 +205,40 @@ class MainWindow(QMainWindow):
                 return
             hz = parse_frequency(self._sw_cw.text())
             self._call("sweep", "set_cw", hz=hz)
-            self._refresh_sweep_status()
+            self._refresh_sweep_status(requested={"cw": hz})
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
 
-    def _refresh_sweep_status(self):
+    @staticmethod
+    def _sweep_mismatch_warning(requested, s, t, p) -> str | None:
+        """Describe any requested sweep value the device did not apply as-is.
+
+        The device can silently clamp a request (e.g. a 900-point request
+        capped to its 450-point maximum) without returning an error.
+        """
+        if not requested:
+            return None
+        actual = {
+            "start": s,
+            "stop": t,
+            "points": p,
+            "center": (s + t) // 2,
+            "span": t - s,
+            "cw": s,
+        }
+        mismatches = []
+        for key, want in requested.items():
+            got = actual.get(key)
+            if want is None or got is None or want == got:
+                continue
+            shown = str(want) if key == "points" else _fmt(want)
+            shown_got = str(got) if key == "points" else _fmt(got)
+            mismatches.append(f"{key} {shown} -> {shown_got}")
+        if not mismatches:
+            return None
+        return "device adjusted: " + ", ".join(mismatches)
+
+    def _refresh_sweep_status(self, requested: dict | None = None):
         try:
             raw = str(self._call("sweep", "get"))
             parts = raw.split()
@@ -229,6 +258,10 @@ class MainWindow(QMainWindow):
                 text = f"Start: {_fmt(s)}  Stop: {_fmt(t)}  Center: {_fmt(c)}"
                 if p:
                     text += f"  Points: {p}"
+                warning = self._sweep_mismatch_warning(requested, s, t, p)
+                if warning:
+                    text += f"  WARNING: {warning}"
+                    QMessageBox.warning(self, "Sweep value adjusted", warning)
                 self._sweep_status.setText(text)
         except Exception:
             self._sweep_status.setText("(readback failed)")

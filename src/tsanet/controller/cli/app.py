@@ -201,6 +201,15 @@ def _sweep_state() -> tuple[int, int, Optional[int]]:
     return start, stop, points
 
 
+def _warn_if_mismatch(label: str, requested, actual, fmt=str) -> None:
+    """Warn when the device applied something other than what was requested."""
+    if requested is not None and actual is not None and requested != actual:
+        typer.echo(
+            f"warning: requested {label} {fmt(requested)} but device applied {fmt(actual)}",
+            err=True,
+        )
+
+
 @sweep_app.command(name="get")
 def sweep_get() -> None:
     """Print current sweep settings."""
@@ -225,6 +234,7 @@ def sweep_start(hz: Annotated[str, typer.Argument(help="Start frequency (e.g. 10
     freq = _freq(hz)
     _call("sweep", "set_start", hz=freq)
     start, _stop, _points = _sweep_state()
+    _warn_if_mismatch("start", freq, start, _fmt_hz)
     typer.echo(f"start = {_fmt_hz(start)}")
 
 
@@ -234,6 +244,7 @@ def sweep_stop(hz: Annotated[str, typer.Argument(help="Stop frequency")]) -> Non
     freq = _freq(hz)
     _call("sweep", "set_stop", hz=freq)
     _start, stop, _points = _sweep_state()
+    _warn_if_mismatch("stop", freq, stop, _fmt_hz)
     typer.echo(f"stop = {_fmt_hz(stop)}")
 
 
@@ -243,7 +254,9 @@ def sweep_center(hz: Annotated[str, typer.Argument(help="Center frequency")]) ->
     freq = _freq(hz)
     _call("sweep", "set_center", hz=freq)
     start, stop, _points = _sweep_state()
-    typer.echo(f"center = {_fmt_hz((start + stop) // 2)}")
+    actual_center = (start + stop) // 2
+    _warn_if_mismatch("center", freq, actual_center, _fmt_hz)
+    typer.echo(f"center = {_fmt_hz(actual_center)}")
 
 
 @sweep_app.command(name="span")
@@ -252,7 +265,9 @@ def sweep_span(hz: Annotated[str, typer.Argument(help="Span")]) -> None:
     freq = _freq(hz)
     _call("sweep", "set_span", hz=freq)
     start, stop, _points = _sweep_state()
-    typer.echo(f"span = {_fmt_hz(stop - start)}")
+    actual_span = stop - start
+    _warn_if_mismatch("span", freq, actual_span, _fmt_hz)
+    typer.echo(f"span = {_fmt_hz(actual_span)}")
 
 
 @sweep_app.command(name="cw")
@@ -261,6 +276,7 @@ def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency")]) -> None:
     freq = _freq(hz)
     _call("sweep", "set_cw", hz=freq)
     start, _stop, _points = _sweep_state()
+    _warn_if_mismatch("cw frequency", freq, start, _fmt_hz)
     typer.echo(f"cw = {_fmt_hz(start)}")
 
 
@@ -277,6 +293,9 @@ def sweep_range(
     t = _freq(stop)
     _call("sweep", "set_start_stop", start=s, stop=t, points=points)
     actual_start, actual_stop, actual_points = _sweep_state()
+    _warn_if_mismatch("start", s, actual_start, _fmt_hz)
+    _warn_if_mismatch("stop", t, actual_stop, _fmt_hz)
+    _warn_if_mismatch("points", points, actual_points)
     extra = f" ({actual_points} pts)" if actual_points is not None else ""
     typer.echo(f"range = {_fmt_hz(actual_start)} - {_fmt_hz(actual_stop)}{extra}")
 
