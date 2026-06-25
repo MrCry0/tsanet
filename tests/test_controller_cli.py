@@ -54,6 +54,32 @@ def test_trace_save_reports_invalid_trace_id_cleanly():
     assert "invalid trace ID" in str(exc_info.value.exit_code)
 
 
+def _patch_trace_data(monkeypatch, freqs, values, trace_id=2):
+    monkeypatch.setattr(
+        cli_app,
+        "_call",
+        lambda domain, op, **kwargs: {"frequencies": freqs, "traces": {str(trace_id): values}},
+    )
+
+
+def test_trace_stats_omits_field_strength_without_antenna_factor(monkeypatch, capsys):
+    _patch_trace_data(monkeypatch, [100, 200, 300], [-50.0, -50.0, -50.0])
+    cli_app.trace_stats(trace_id=2, start="0hz", stop="1000hz", unit="dBm")
+    out = capsys.readouterr().out
+    assert "Field strength" not in out
+    assert "Occupied BW" in out
+    assert "PAPR" in out
+    assert "Flatness" in out
+
+
+def test_trace_stats_shows_field_strength_with_antenna_factor(monkeypatch, capsys):
+    _patch_trace_data(monkeypatch, [100, 200, 300], [-50.0, -50.0, -50.0])
+    cli_app.trace_stats(trace_id=2, start="0hz", stop="1000hz", unit="dBm", antenna_factor=20.0)
+    out = capsys.readouterr().out
+    # -50 dBm -> 57 dBuV (+107) -> + 20 dB/m antenna factor = 77.0 dBuV/m.
+    assert "Field strength : 77.0 dBuV/m" in out
+
+
 class _FakeRpcClient:
     """Stand-in for RpcClient that records calls instead of touching a socket."""
 

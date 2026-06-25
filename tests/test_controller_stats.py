@@ -86,3 +86,90 @@ class TestStats:
     def test_mismatched_lengths_raises(self):
         with pytest.raises(ValueError):
             compute_stats([1, 2], [1.0], "RAW", 0, 10)
+
+
+class TestOccupiedBandwidth:
+    def test_flat_power_spans_nearly_full_range(self):
+        freqs = list(range(100_000_000, 110_000_000, 1_000_000))
+        values = [-50.0] * len(freqs)
+        result = compute_stats(freqs, values, "dBm", freqs[0], freqs[-1])
+        assert result.occupied_bandwidth_hz == freqs[-1] - freqs[0]
+
+    def test_dominant_spike_collapses_bandwidth(self):
+        freqs = list(range(0, 100_000_000, 1_000_000))
+        values = [-100.0] * len(freqs)
+        values[50] = 0.0  # one spike ~100 dB above the noise floor
+        result = compute_stats(freqs, values, "dBm", freqs[0], freqs[-1])
+        assert result.occupied_bandwidth_hz == 0
+
+    def test_all_zero_power_raises_instead_of_dividing_by_zero(self):
+        # PAPR (peak/average) is undefined for an entirely zero-power trace;
+        # this must raise a clear error rather than a ZeroDivisionError.
+        freqs = [100_000_000, 200_000_000]
+        values = [0.0, 0.0]
+        with pytest.raises(ValueError):
+            compute_stats(freqs, values, "W", freqs[0], freqs[-1])
+
+
+class TestPaprAndFlatness:
+    def test_flat_dbm_signal_has_zero_papr_and_flatness(self):
+        freqs = [100_000_000, 200_000_000, 300_000_000]
+        values = [-50.0, -50.0, -50.0]
+        result = compute_stats(freqs, values, "dBm", freqs[0], freqs[-1])
+        assert result.papr_db == 0.0
+        assert result.flatness_db == 0.0
+
+    def test_dbm_flatness_is_max_minus_min(self):
+        # For dB-scale units the flatness in dB equals max - min directly.
+        freqs = [100_000_000, 200_000_000]
+        values = [-80.0, -42.0]
+        result = compute_stats(freqs, values, "dBm", freqs[0], freqs[-1])
+        assert _approx(result.flatness_db, 38.0)
+
+    def test_papr_matches_hand_computed_ratio(self):
+        # power(1mW=0dBm) vs avg(0.01mW dominant + negligible) -> ~20 dB.
+        freqs = [100_000_000, 200_000_000, 300_000_000]
+        values = [-100.0, 0.0, -100.0]
+        result = compute_stats(freqs, values, "dBm", freqs[0], freqs[-1])
+        lin = [10 ** (v / 10) for v in values]
+        expected = 10 * math.log10(max(lin) / (sum(lin) / len(lin)))
+        assert _approx(result.papr_db, expected)
+
+    def test_voltage_flatness_uses_factor_20(self):
+        freqs = [100_000_000, 200_000_000]
+        values = [1.0, 2.0]
+        result = compute_stats(freqs, values, "V", freqs[0], freqs[-1])
+        assert _approx(result.flatness_db, 20 * math.log10(2.0))
+
+
+class TestFieldStrength:
+    def test_none_by_default(self):
+        freqs = [100_000_000, 200_000_000]
+        values = [-50.0, -50.0]
+        result = compute_stats(freqs, values, "dBm", freqs[0], freqs[-1])
+        assert result.field_strength_dbuvm is None
+
+    def test_dbm_field_strength(self):
+        # -50 dBm -> 57 dBuV (the +107 conversion) -> + AF(20) = 77.
+        freqs = [100_000_000, 200_000_000]
+        values = [-50.0, -50.0]
+        result = compute_stats(freqs, values, "dBm", freqs[0], freqs[-1], antenna_factor=20.0)
+        assert _approx(result.field_strength_dbuvm, 77.0)
+
+    def test_dbmv_field_strength(self):
+        freqs = [100_000_000, 200_000_000]
+        values = [10.0, 10.0]
+        result = compute_stats(freqs, values, "dBmV", freqs[0], freqs[-1], antenna_factor=5.0)
+        assert _approx(result.field_strength_dbuvm, 10.0 + 60.0 + 5.0)
+
+    def test_dbuv_field_strength_is_passthrough_plus_af(self):
+        freqs = [100_000_000, 200_000_000]
+        values = [30.0, 30.0]
+        result = compute_stats(freqs, values, "dBuV", freqs[0], freqs[-1], antenna_factor=3.0)
+        assert _approx(result.field_strength_dbuvm, 33.0)
+
+    def test_raw_unit_raises(self):
+        freqs = [100_000_000, 200_000_000]
+        values = [1.0, 2.0]
+        with pytest.raises(ValueError):
+            compute_stats(freqs, values, "RAW", freqs[0], freqs[-1], antenna_factor=1.0)

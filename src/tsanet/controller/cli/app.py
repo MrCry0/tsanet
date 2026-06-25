@@ -532,6 +532,14 @@ def trace_stats(
     start: Annotated[str, typer.Option("--start", help="Start frequency (e.g. 410.5mhz)")],
     stop: Annotated[str, typer.Option("--stop", help="Stop frequency")],
     unit: Annotated[str, typer.Option("--unit", "-u", help="Trace unit (dBm, dBmV, ...)")] = "dBm",
+    antenna_factor: Annotated[
+        Optional[float],
+        typer.Option(
+            "--antenna-factor",
+            "-af",
+            help="Antenna factor in dB/m, to report field strength in dBuV/m",
+        ),
+    ] = None,
 ) -> None:
     """Compute statistics over a frequency sub-range."""
     start_hz = _freq(start)
@@ -542,16 +550,21 @@ def trace_stats(
     vals = data["traces"][str(trace_id)]
 
     try:
-        result = compute_stats(freqs, vals, unit, start_hz, stop_hz)
+        result = compute_stats(freqs, vals, unit, start_hz, stop_hz, antenna_factor)
     except ValueError as exc:
         raise typer.Exit(str(exc)) from exc
     n = sum(1 for f in freqs if start_hz <= f <= stop_hz)
 
     typer.echo(f"Trace {trace_id} stats ({start} - {stop}, {n} points), unit: {unit}")
-    typer.echo(f"  Average power : {result.average:.1f} {unit}")
-    typer.echo(f"  Median        : {result.median:.1f} {unit}")
-    typer.echo(f"  Min           : {result.minimum:.1f} {unit}  @ {_fmt_hz(result.min_freq)}")
-    typer.echo(f"  Max           : {result.maximum:.1f} {unit}  @ {_fmt_hz(result.max_freq)}")
+    if result.field_strength_dbuvm is not None:
+        typer.echo(f"  {'Field strength':<15s}: {result.field_strength_dbuvm:.1f} dBuV/m")
+    typer.echo(f"  {'Occupied BW':<15s}: {_fmt_hz(result.occupied_bandwidth_hz)} (99% power)")
+    typer.echo(f"  {'Average power':<15s}: {result.average:.1f} {unit}")
+    typer.echo(f"  {'Median':<15s}: {result.median:.1f} {unit}")
+    typer.echo(f"  {'Min':<15s}: {result.minimum:.1f} {unit}  @ {_fmt_hz(result.min_freq)}")
+    typer.echo(f"  {'Max':<15s}: {result.maximum:.1f} {unit}  @ {_fmt_hz(result.max_freq)}")
+    typer.echo(f"  {'PAPR':<15s}: {result.papr_db:.1f} dB")
+    typer.echo(f"  {'Flatness':<15s}: {result.flatness_db:.1f} dB")
 
 
 # -- signal ----------------------------------------------------------------
