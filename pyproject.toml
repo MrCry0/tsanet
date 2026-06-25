@@ -22,7 +22,7 @@ gui = ["PySide6>=6.5", "pyqtgraph>=0.13"]
 all = ["tsanet[hub,cli,gui]"]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "twine>=6"]
 
 [project.scripts]
 tsanet-hub = "tsanet.hub.cli:main"

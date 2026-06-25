@@ -28,3 +28,32 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+  test-extras:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+        extra: ["hub", "cli", "core"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: |
+          case "${{ matrix.extra }}" in
+            core) uv sync --locked --python ${{ matrix.python-version }} ;;
+            hub)  uv sync --extra hub --locked --python ${{ matrix.python-version }} ;;
+            cli)  uv sync --extra cli --locked --python ${{ matrix.python-version }} ;;
+          esac
+
+      - name: Test (skip GUI tests for headless extras)
+        run: |
+          case "${{ matrix.extra }}" in
+            hub|core) uv run pytest --ignore=tests/test_gui_sweep_warning.py --ignore=tests/test_controller_stats.py -k "not gui" ;;
+            cli)      uv run pytest --ignore=tests/test_gui_sweep_warning.py ;;
+          esac
