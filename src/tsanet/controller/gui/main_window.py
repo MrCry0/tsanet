@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from logging import LogRecord
 
-from PySide6.QtCore import Qt, QObject, Signal, Slot
+from PySide6.QtCore import Qt, QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QDockWidget,
     QFormLayout,
@@ -29,7 +30,6 @@ from tsanet.controller.gui.capture_viewer import CaptureViewer
 from tsanet.controller.gui.connection_dialog import ConnectionDialog
 from tsanet.controller.gui.device_panel import DevicePanel
 from tsanet.controller.gui.live_graph import LiveGraphPanel
-from tsanet.controller.gui.stats_dialog import StatsDialog
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient
 from tsanet.device.model import VALID_CALC
@@ -253,6 +253,7 @@ class MainWindow(QMainWindow):
             central.insertTab(4, self._live_graph, "Live Graph")
 
             self._refresh_sweep_status()
+            self._refresh_trace_state()
 
     def _on_tab_changed(self, index):
         if self._SWEEP_TAB == index and self._rpc is not None:
@@ -261,7 +262,8 @@ class MainWindow(QMainWindow):
         elif index == 0 and self._rpc is not None:
             self._status.showMessage("Devices tab — click a device to select it")
         elif index == 2 and self._rpc is not None:
-            self._status.showMessage("Trace tab — enable traces and open statistics")
+            self._refresh_trace_state()
+            self._status.showMessage("Trace tab — toggle traces, set calc, or enable stats")
         elif index == 3 and self._rpc is not None:
             self._status.showMessage("Capture tab — fetch a screenshot from the device")
         elif index == 4 and self._rpc is not None:
@@ -440,66 +442,153 @@ class MainWindow(QMainWindow):
         w = QWidget()
         layout = QVBoxLayout(w)
 
-        group = QGroupBox("Trace")
-        form = QFormLayout()
-        self._trace_id = QLineEdit("1")
-        self._trace_id.setToolTip("Trace channel number (1-4 on tinySA Ultra)")
-        self._trace_id.setPlaceholderText("1")
-        self._trace_calc = QComboBox()
-        self._trace_calc.addItems(sorted(VALID_CALC))
-        self._trace_calc.setCurrentText("minh")
-        self._trace_calc.setToolTip("Trace calculation mode — applied immediately on selection")
-        self._trace_calc.currentTextChanged.connect(self._apply_trace_calc)
-        form.addRow("ID:", self._trace_id)
-        form.addRow("Calc:", self._trace_calc)
+        self._trace_on_btn: list[QPushButton] = []
+        self._trace_calc_cb: list[QComboBox] = []
+        self._trace_stats_btn: list[QPushButton] = []
+        self._stats_timer = QTimer(self)
+        self._stats_timer.timeout.connect(self._refresh_trace_stats)
+        self._stats_trace_id: int | None = None
+        self._trace_refresh_blocked = False
 
-        btn = QHBoxLayout()
-        on_btn = QPushButton("On")
-        on_btn.setToolTip("Enable the selected trace")
-        on_btn.clicked.connect(lambda: self._trace_cmd("enable"))
-        off_btn = QPushButton("Off")
-        off_btn.setToolTip("Disable the selected trace")
-        off_btn.clicked.connect(lambda: self._trace_cmd("disable"))
-        btn.addWidget(on_btn)
-        btn.addWidget(off_btn)
+        stats_group = QButtonGroup(self)
+        stats_group.setExclusive(True)
 
-        group.setLayout(form)
-        layout.addWidget(group)
-        layout.addLayout(btn)
+        for i in range(3):
+            tid = i + 1
+            row = QHBoxLayout()
 
-        stats_btn = QPushButton("Trace Stats...")
-        stats_btn.setToolTip(
-            "Open statistics dialog: average, median, min/max, channel power, "
-            "occupied bandwidth, PAPR, flatness, field strength"
+            on_btn = QPushButton(f"{tid}: OFF")
+            on_btn.setCheckable(True)
+            on_btn.setToolTip(f"Toggle trace {tid} on/off")
+            on_btn.toggled.connect(lambda checked, t=tid: self._trace_set_enabled(t, checked))
+            self._trace_on_btn.append(on_btn)
+
+            calc = QComboBox()
+            calc.addItems(sorted(VALID_CALC))
+            calc.setCurrentText("off")
+            calc.setToolTip(f"Calculation mode for trace {tid} — applied on selection")
+            calc.currentTextChanged.connect(lambda val, t=tid: self._trace_set_calc(t, val))
+            self._trace_calc_cb.append(calc)
+
+            stats_btn = QPushButton("Stats")
+            stats_btn.setCheckable(True)
+            stats_btn.setToolTip(
+                f"Show auto-updating statistics for trace {tid} (only one at a time)"
+            )
+            stats_group.addButton(stats_btn, tid)
+            self._trace_stats_btn.append(stats_btn)
+
+            row.addWidget(on_btn)
+            row.addWidget(calc)
+            row.addWidget(stats_btn)
+            layout.addLayout(row)
+
+        stats_group.buttonToggled.connect(self._on_stats_toggled)
+
+        self._trace_stats_display = QLabel("")
+        self._trace_stats_display.setWordWrap(True)
+        self._trace_stats_display.setMinimumHeight(120)
+        self._trace_stats_display.setStyleSheet(
+            "QLabel { font-family: monospace; font-size: 11px; }"
         )
-        stats_btn.clicked.connect(self._open_stats)
-        layout.addWidget(stats_btn)
-        layout.addStretch()
+        layout.addWidget(self._trace_stats_display)
 
+        layout.addStretch()
         return w
 
-    def _trace_cmd(self, op, **extra):
-        try:
-            tid = int(self._trace_id.text())
-            self._call("trace", op, id=tid, **extra)
-        except Exception as exc:
-            QMessageBox.critical(self, "Error", str(exc))
-
-    def _apply_trace_calc(self, calc: str) -> None:
-        if self._rpc is None or not calc:
+    def _refresh_trace_state(self) -> None:
+        """Read current trace state from the device and update the UI."""
+        if self._rpc is None:
             return
         try:
-            tid = int(self._trace_id.text())
+            raw = str(self._call("trace", "get_all"))
+        except Exception:
+            return
+        self._trace_refresh_blocked = True
+        try:
+            for line in raw.strip().splitlines():
+                parts = line.replace(",", " ").split()
+                if len(parts) < 3:
+                    continue
+                idx = int(parts[0])
+                on = parts[1] in ("1", "on", "ON")
+                calc = parts[2]
+                if 0 <= idx < 3:
+                    self._trace_on_btn[idx].setChecked(on)
+                    self._trace_on_btn[idx].setText(f"{idx + 1}: {'ON' if on else 'OFF'}")
+                    if calc in VALID_CALC:
+                        self._trace_calc_cb[idx].setCurrentText(calc)
+        finally:
+            self._trace_refresh_blocked = False
+
+    # -- trace actions ------------------------------------------------------
+
+    def _trace_set_enabled(self, tid: int, on: bool) -> None:
+        if self._rpc is None or self._trace_refresh_blocked:
+            return
+        try:
+            if on:
+                self._call("trace", "enable", id=tid)
+            else:
+                self._call("trace", "disable", id=tid)
+            self._trace_on_btn[tid - 1].setText(f"{tid}: {'ON' if on else 'OFF'}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", str(exc))
+            # Revert the button state
+            self._trace_refresh_blocked = True
+            self._trace_on_btn[tid - 1].setChecked(not on)
+            self._trace_refresh_blocked = False
+
+    def _trace_set_calc(self, tid: int, calc: str) -> None:
+        if self._rpc is None or not calc or self._trace_refresh_blocked:
+            return
+        try:
             self._call("trace", "enable_calc", id=tid, calc=calc)
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
 
-    def _open_stats(self):
-        if self._rpc is None:
-            QMessageBox.warning(self, "Not connected", "Connect first")
+    def _on_stats_toggled(self, btn, checked) -> None:
+        if checked:
+            tid = btn.group().id(btn)
+            self._stats_trace_id = tid
+            self._refresh_trace_stats()
+            self._stats_timer.start(1000)
+        else:
+            self._stats_trace_id = None
+            self._stats_timer.stop()
+            self._trace_stats_display.setText("")
+
+    def _refresh_trace_stats(self) -> None:
+        tid = self._stats_trace_id
+        if tid is None or self._rpc is None:
             return
-        dlg = StatsDialog(self._rpc, self)
-        dlg.exec()
+        try:
+            data = self._call("trace", "fetch_data", ids=[tid])
+        except Exception:
+            return
+
+        freqs = data["frequencies"]
+        vals = data["traces"][str(tid)]
+
+        try:
+            from tsanet.controller.stats import compute_stats
+
+            result = compute_stats(freqs, vals, "dBm", freqs[0], freqs[-1])
+        except Exception as exc:
+            self._trace_stats_display.setText(f"Stats error: {exc}")
+            return
+
+        self._trace_stats_display.setText(
+            f"Trace {tid}\n"
+            f"  Channel power      : {result.channel_power:.1f} dBm\n"
+            f"  Average            : {result.average:.1f} dBm\n"
+            f"  Median             : {result.median:.1f} dBm\n"
+            f"  Min                : {result.minimum:.1f} dBm  @ {_fmt(result.min_freq)}\n"
+            f"  Max                : {result.maximum:.1f} dBm  @ {_fmt(result.max_freq)}\n"
+            f"  Occupied BW (99%)  : {_fmt(result.occupied_bandwidth_hz)}\n"
+            f"  PAPR               : {result.papr_db:.1f} dB\n"
+            f"  Flatness           : {result.flatness_db:.1f} dB"
+        )
 
 
 def _fmt(hz: int) -> str:
