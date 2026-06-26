@@ -475,6 +475,7 @@ class MainWindow(QMainWindow):
             stats_btn.setToolTip(
                 f"Show auto-updating statistics for trace {tid} (only one at a time)"
             )
+            stats_btn.pressed.connect(lambda b=stats_btn: self._stats_clicked(b))
             stats_group.addButton(stats_btn, tid)
             self._trace_stats_btn.append(stats_btn)
 
@@ -553,6 +554,11 @@ class MainWindow(QMainWindow):
             self._call("trace", "enable_calc", id=tid, calc=calc)
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
+
+    def _stats_clicked(self, btn) -> None:
+        """Uncheck an already-checked Stats button on click (toggle off)."""
+        if btn.isChecked():
+            btn.setChecked(False)
 
     def _on_stats_toggled(self, btn, checked) -> None:
         if checked:
