@@ -7,7 +7,6 @@ from logging import LogRecord
 
 from PySide6.QtCore import Qt, QObject, Signal, Slot
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDockWidget,
@@ -471,9 +470,6 @@ class MainWindow(QMainWindow):
         self._stats_trace_id: int | None = None
         self._trace_refresh_blocked = False
 
-        stats_group = QButtonGroup(self)
-        stats_group.setExclusive(True)
-
         trace_group = QGroupBox("Traces")
         trace_grid = QGridLayout(trace_group)
         trace_grid.setColumnStretch(1, 1)
@@ -525,12 +521,11 @@ class MainWindow(QMainWindow):
             stats_btn = QPushButton("off")
             stats_btn.setCheckable(True)
             stats_btn.setToolTip(f"Show auto-updating stats for trace {tid} (only one at a time)")
-            stats_btn.pressed.connect(lambda b=stats_btn: self._stats_clicked(b))
-            stats_group.addButton(stats_btn, tid)
+            stats_btn.toggled.connect(
+                lambda checked, t=tid, b=None: self._on_stats_toggled(t, checked)
+            )
             self._trace_stats_btn.append(stats_btn)
             trace_grid.addWidget(stats_btn, row, 4)
-
-        stats_group.buttonToggled.connect(self._on_stats_toggled)
 
         ctrl_layout.addWidget(trace_group)
 
@@ -628,22 +623,26 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
 
-    def _stats_clicked(self, btn) -> None:
-        """Uncheck an already-checked Stats button on click (toggle off)."""
-        if btn.isChecked():
-            btn.setChecked(False)
-
-    def _on_stats_toggled(self, btn, checked) -> None:
+    def _on_stats_toggled(self, tid: int, checked: bool) -> None:
+        if self._trace_refresh_blocked:
+            return
         if checked:
-            tid = btn.group().id(btn)
+            # Turn off the previously active stats button.
+            old_tid = self._stats_trace_id
+            if old_tid is not None and old_tid != tid:
+                self._trace_refresh_blocked = True
+                self._trace_stats_btn[old_tid - 1].setChecked(False)
+                self._trace_stats_btn[old_tid - 1].setText("off")
+                self._trace_refresh_blocked = False
             self._stats_trace_id = tid
             self._update_subscription()
-            btn.setText("on")
+            self._trace_stats_btn[tid - 1].setText("on")
         else:
-            self._stats_trace_id = None
-            self._trace_stats_display.setText("")
-            self._update_subscription()
-            btn.setText("off")
+            if self._stats_trace_id == tid:
+                self._stats_trace_id = None
+                self._trace_stats_display.setText("")
+                self._update_subscription()
+            self._trace_stats_btn[tid - 1].setText("off")
 
     def _on_subscription_data(self, data: dict) -> None:
         """Handle subscription data for stats display."""
