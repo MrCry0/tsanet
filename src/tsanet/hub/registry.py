@@ -58,15 +58,26 @@ class DeviceRegistry:
         present = set(self._list_ports())
         with self._lock:
             known = set(self._devices)
-            added, removed = set(), set()
-            for port in present - known:
-                device = self._probe_port(port)
-                if device is not None:
+
+        # Probe new ports outside the lock — serial I/O takes seconds.
+        to_add: dict[str, RegisteredDevice] = {}
+        for port in present - known:
+            device = self._probe_port(port)
+            if device is not None:
+                to_add[port] = device
+
+        # Update the registry under the lock.
+        added: set[str] = set()
+        removed: set[str] = set()
+        with self._lock:
+            for port, device in to_add.items():
+                if port not in self._devices:
                     self._devices[port] = device
                     added.add(port)
             for port in known - present:
                 self._drop(port)
                 removed.add(port)
+
         if added:
             logger.info("devices added: %s", ", ".join(sorted(added)))
         if removed:
