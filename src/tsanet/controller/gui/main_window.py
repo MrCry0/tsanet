@@ -7,6 +7,7 @@ from logging import LogRecord
 
 from PySide6.QtCore import Qt, QObject, Signal, Slot
 from PySide6.QtWidgets import (
+    QComboBox,
     QDockWidget,
     QFormLayout,
     QGroupBox,
@@ -31,6 +32,7 @@ from tsanet.controller.gui.live_graph import LiveGraphPanel
 from tsanet.controller.gui.stats_dialog import StatsDialog
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient
+from tsanet.device.model import VALID_CALC
 
 
 class _LogBridge(QObject):
@@ -273,56 +275,44 @@ class MainWindow(QMainWindow):
         w = QWidget()
         layout = QVBoxLayout(w)
 
-        range_group = QGroupBox("Range")
+        range_group = QGroupBox("Range  (press Enter to apply)")
         form = QFormLayout()
         self._sw_start = QLineEdit("0")
         self._sw_start.setToolTip("Sweep start frequency (e.g. 100mhz, 1.5ghz)")
         self._sw_start.setPlaceholderText("e.g. 100mhz")
+        self._sw_start.returnPressed.connect(self._apply_sweep_range)
         self._sw_stop = QLineEdit("800mhz")
         self._sw_stop.setToolTip("Sweep stop frequency (e.g. 800mhz, 1ghz)")
         self._sw_stop.setPlaceholderText("e.g. 800mhz")
+        self._sw_stop.returnPressed.connect(self._apply_sweep_range)
         self._sw_points = QLineEdit("450")
         self._sw_points.setToolTip(
             "Number of sweep points (device maximum is model-dependent, typically 450)"
         )
+        self._sw_points.returnPressed.connect(self._apply_sweep_range)
         form.addRow("Start:", self._sw_start)
         form.addRow("Stop:", self._sw_stop)
         form.addRow("Points:", self._sw_points)
         range_group.setLayout(form)
 
-        ctrl = QGroupBox("Control")
+        ctrl = QGroupBox("Control  (press Enter to apply)")
         ctrl_layout = QFormLayout()
         self._sw_center = QLineEdit()
         self._sw_center.setToolTip("Center frequency — sets start/stop around this value")
         self._sw_center.setPlaceholderText("e.g. 433.92mhz")
+        self._sw_center.returnPressed.connect(self._apply_sweep_center)
         self._sw_span = QLineEdit()
         self._sw_span.setToolTip("Span width — sets start/stop symmetrically around center")
         self._sw_span.setPlaceholderText("e.g. 200mhz")
+        self._sw_span.returnPressed.connect(self._apply_sweep_span)
         self._sw_cw = QLineEdit()
         self._sw_cw.setPlaceholderText("e.g. 433.92mhz")
         self._sw_cw.setToolTip("Continuous-wave (zero-span) frequency")
+        self._sw_cw.returnPressed.connect(self._apply_sweep_cw)
         ctrl_layout.addRow("Center:", self._sw_center)
         ctrl_layout.addRow("Span:", self._sw_span)
         ctrl_layout.addRow("CW:", self._sw_cw)
         ctrl.setLayout(ctrl_layout)
-
-        btn = QHBoxLayout()
-        apply_btn = QPushButton("Apply Range")
-        apply_btn.setToolTip("Set sweep start, stop, and points on the device")
-        apply_btn.clicked.connect(self._apply_sweep_range)
-        center_btn = QPushButton("Set Center")
-        center_btn.setToolTip("Set center frequency (updates start/stop)")
-        center_btn.clicked.connect(self._apply_sweep_center)
-        span_btn = QPushButton("Set Span")
-        span_btn.setToolTip("Set span width (updates start/stop symmetrically)")
-        span_btn.clicked.connect(self._apply_sweep_span)
-        cw_btn = QPushButton("Set CW")
-        cw_btn.setToolTip("Set continuous-wave (zero-span) frequency")
-        cw_btn.clicked.connect(self._apply_sweep_cw)
-        btn.addWidget(apply_btn)
-        btn.addWidget(center_btn)
-        btn.addWidget(span_btn)
-        btn.addWidget(cw_btn)
 
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setToolTip("Read current sweep state back from the device")
@@ -333,7 +323,6 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(range_group)
         layout.addWidget(ctrl)
-        layout.addLayout(btn)
         layout.addWidget(refresh_btn)
         layout.addWidget(self._sweep_status)
         layout.addStretch()
@@ -456,9 +445,11 @@ class MainWindow(QMainWindow):
         self._trace_id = QLineEdit("1")
         self._trace_id.setToolTip("Trace channel number (1-4 on tinySA Ultra)")
         self._trace_id.setPlaceholderText("1")
-        self._trace_calc = QLineEdit()
-        self._trace_calc.setToolTip("Calculation mode: minh, maxh, aver4, off, etc.")
-        self._trace_calc.setPlaceholderText("e.g. minh")
+        self._trace_calc = QComboBox()
+        self._trace_calc.addItems(sorted(VALID_CALC))
+        self._trace_calc.setCurrentText("minh")
+        self._trace_calc.setToolTip("Trace calculation mode — applied immediately on selection")
+        self._trace_calc.currentTextChanged.connect(self._apply_trace_calc)
         form.addRow("ID:", self._trace_id)
         form.addRow("Calc:", self._trace_calc)
 
@@ -469,14 +460,8 @@ class MainWindow(QMainWindow):
         off_btn = QPushButton("Off")
         off_btn.setToolTip("Disable the selected trace")
         off_btn.clicked.connect(lambda: self._trace_cmd("disable"))
-        calc_btn = QPushButton("Set Calc")
-        calc_btn.setToolTip("Apply the calculation mode to the selected trace")
-        calc_btn.clicked.connect(
-            lambda: self._trace_cmd("enable_calc", calc=self._trace_calc.text() or "off")
-        )
         btn.addWidget(on_btn)
         btn.addWidget(off_btn)
-        btn.addWidget(calc_btn)
 
         group.setLayout(form)
         layout.addWidget(group)
@@ -497,6 +482,15 @@ class MainWindow(QMainWindow):
         try:
             tid = int(self._trace_id.text())
             self._call("trace", op, id=tid, **extra)
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", str(exc))
+
+    def _apply_trace_calc(self, calc: str) -> None:
+        if self._rpc is None or not calc:
+            return
+        try:
+            tid = int(self._trace_id.text())
+            self._call("trace", "enable_calc", id=tid, calc=calc)
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
 
