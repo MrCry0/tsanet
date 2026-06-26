@@ -523,7 +523,7 @@ class MainWindow(QMainWindow):
             cw.setLayout(hbox)
             trace_grid.addWidget(cw, row, 3)
 
-            stats_btn = QPushButton("Stats")
+            stats_btn = QPushButton("off")
             stats_btn.setCheckable(True)
             stats_btn.setToolTip(f"Show auto-updating stats for trace {tid} (only one at a time)")
             stats_btn.pressed.connect(lambda b=stats_btn: self._stats_clicked(b))
@@ -635,10 +635,12 @@ class MainWindow(QMainWindow):
             self._stats_trace_id = tid
             self._refresh_trace_stats()
             self._stats_timer.start(1000)
+            btn.setText("on")
         else:
             self._stats_trace_id = None
             self._stats_timer.stop()
             self._trace_stats_display.setText("")
+            btn.setText("off")
 
     def _refresh_trace_stats(self) -> None:
         tid = self._stats_trace_id
