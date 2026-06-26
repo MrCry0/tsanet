@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDockWidget,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -474,18 +475,25 @@ class MainWindow(QMainWindow):
         stats_group = QButtonGroup(self)
         stats_group.setExclusive(True)
 
-        trace_group = QGroupBox("Traces 1 – 3")
-        trace_grid = QVBoxLayout(trace_group)
+        trace_group = QGroupBox("Traces")
+        trace_grid = QGridLayout(trace_group)
+        trace_grid.setColumnStretch(1, 1)
+        trace_grid.setHorizontalSpacing(8)
+
+        # Column headers.
+        for col, name in enumerate(["#", "Mode", "State", "Graph", "Stats"]):
+            hdr = QLabel(name)
+            hdr.setStyleSheet("font-weight: bold")
+            hdr.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            trace_grid.addWidget(hdr, 0, col)
 
         for i in range(3):
             tid = i + 1
-            row = QHBoxLayout()
+            row = i + 1  # grid row, offset by header
 
-            on_btn = QPushButton(f"{tid}: OFF")
-            on_btn.setCheckable(True)
-            on_btn.setToolTip(f"Toggle trace {tid} on/off")
-            on_btn.toggled.connect(lambda checked, t=tid: self._trace_set_enabled(t, checked))
-            self._trace_on_btn.append(on_btn)
+            lbl = QLabel(str(tid))
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            trace_grid.addWidget(lbl, row, 0)
 
             calc = QComboBox()
             calc.addItems(sorted(VALID_CALC))
@@ -493,11 +501,27 @@ class MainWindow(QMainWindow):
             calc.setToolTip(f"Calc mode for trace {tid} — applied on selection")
             calc.currentTextChanged.connect(lambda val, t=tid: self._trace_set_calc(t, val))
             self._trace_calc_cb.append(calc)
+            trace_grid.addWidget(calc, row, 1)
+
+            on_btn = QPushButton("off")
+            on_btn.setCheckable(True)
+            on_btn.setToolTip(f"Toggle trace {tid} on/off")
+            on_btn.toggled.connect(lambda checked, t=tid: self._trace_set_enabled(t, checked))
+            self._trace_on_btn.append(on_btn)
+            trace_grid.addWidget(on_btn, row, 2)
 
             graph_chk = QCheckBox()
             graph_chk.setToolTip(f"Add trace {tid} to the live graph")
             graph_chk.toggled.connect(lambda checked, t=tid: self._update_graph())
             self._trace_graph_chk.append(graph_chk)
+            hbox = QHBoxLayout()
+            hbox.setContentsMargins(0, 0, 0, 0)
+            hbox.addStretch()
+            hbox.addWidget(graph_chk)
+            hbox.addStretch()
+            cw = QWidget()
+            cw.setLayout(hbox)
+            trace_grid.addWidget(cw, row, 3)
 
             stats_btn = QPushButton("Stats")
             stats_btn.setCheckable(True)
@@ -505,12 +529,7 @@ class MainWindow(QMainWindow):
             stats_btn.pressed.connect(lambda b=stats_btn: self._stats_clicked(b))
             stats_group.addButton(stats_btn, tid)
             self._trace_stats_btn.append(stats_btn)
-
-            row.addWidget(on_btn)
-            row.addWidget(calc)
-            row.addWidget(graph_chk)
-            row.addWidget(stats_btn)
-            trace_grid.addLayout(row)
+            trace_grid.addWidget(stats_btn, row, 4)
 
         stats_group.buttonToggled.connect(self._on_stats_toggled)
 
@@ -572,7 +591,7 @@ class MainWindow(QMainWindow):
                 calc = parts[2]
                 if 0 <= idx < 3:
                     self._trace_on_btn[idx].setChecked(on)
-                    self._trace_on_btn[idx].setText(f"{idx + 1}: {'ON' if on else 'OFF'}")
+                    self._trace_on_btn[idx].setText("on" if on else "off")
                     if calc in VALID_CALC:
                         self._trace_calc_cb[idx].setCurrentText(calc)
         finally:
@@ -588,12 +607,13 @@ class MainWindow(QMainWindow):
                 self._call("trace", "enable", id=tid)
             else:
                 self._call("trace", "disable", id=tid)
-            self._trace_on_btn[tid - 1].setText(f"{tid}: {'ON' if on else 'OFF'}")
+            self._trace_on_btn[tid - 1].setText("on" if on else "off")
         except Exception as exc:
             QMessageBox.critical(self, "Error", str(exc))
             # Revert the button state
             self._trace_refresh_blocked = True
             self._trace_on_btn[tid - 1].setChecked(not on)
+            self._trace_on_btn[tid - 1].setText("on" if not on else "off")
             self._trace_refresh_blocked = False
 
     def _trace_set_calc(self, tid: int, calc: str) -> None:
