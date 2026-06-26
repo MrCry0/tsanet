@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pyqtgraph as pg
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import (
@@ -19,12 +21,18 @@ class _EventBridge(QObject):
     arrived = Signal(dict)
 
 
+DataCallback = Callable[[dict], None]
+
+
 class LiveGraphPanel(QWidget):
     """Pyqtgraph plot that displays live trace data from a subscription.
 
     Call :meth:`start` with the list of trace IDs and their calc modes.
     Call :meth:`stop` to end the subscription.  Use :meth:`graph` to
     embed the PlotWidget into an external layout.
+
+    Register a :meth:`set_data_callback` to receive every subscription
+    update payload for sharing with other consumers (e.g. stats).
     """
 
     def __init__(self, rpc: RpcClient, parent=None):
@@ -32,6 +40,7 @@ class LiveGraphPanel(QWidget):
         self._rpc = rpc
         self._running = False
         self._frequencies: list[int] = []
+        self._data_cb: DataCallback | None = None
 
         self._bridge = _EventBridge()
         self._bridge.arrived.connect(self._on_event)
@@ -51,6 +60,10 @@ class LiveGraphPanel(QWidget):
     def graph(self):
         """The PlotWidget, for embedding in an external layout."""
         return self._plot
+
+    def set_data_callback(self, cb: DataCallback | None) -> None:
+        """Register or clear a callback receiving every subscription payload."""
+        self._data_cb = cb
 
     def start(self, ids: list[int], calcs: dict[int, str]) -> None:
         """Begin live graphing for *ids* with the given calc modes."""
@@ -113,3 +126,7 @@ class LiveGraphPanel(QWidget):
                     vals = traces[tid]
                     n = min(len(self._frequencies), len(vals))
                     curve.setData(self._frequencies[:n], vals[:n])
+
+        cb = self._data_cb
+        if cb is not None:
+            cb(data)

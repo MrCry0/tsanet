@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from logging import LogRecord
 
-from PySide6.QtCore import Qt, QObject, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QObject, Signal, Slot
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -269,6 +269,7 @@ class MainWindow(QMainWindow):
             central.insertTab(3, self._capture_viewer, "Capture")
 
             self._live_graph_widget = LiveGraphPanel(self._rpc)
+            self._live_graph_widget.set_data_callback(self._on_subscription_data)
             self._live_graph_container.layout().addWidget(self._live_graph_widget.graph)
 
             self._refresh_sweep_status()
@@ -467,8 +468,6 @@ class MainWindow(QMainWindow):
         self._trace_calc_cb: list[QComboBox] = []
         self._trace_graph_chk: list[QCheckBox] = []
         self._trace_stats_btn: list[QPushButton] = []
-        self._stats_timer = QTimer(self)
-        self._stats_timer.timeout.connect(self._refresh_trace_stats)
         self._stats_trace_id: int | None = None
         self._trace_refresh_blocked = False
 
@@ -512,7 +511,7 @@ class MainWindow(QMainWindow):
 
             graph_chk = QCheckBox()
             graph_chk.setToolTip(f"Add trace {tid} to the live graph")
-            graph_chk.toggled.connect(lambda checked, t=tid: self._update_graph())
+            graph_chk.toggled.connect(lambda checked, t=tid: self._update_subscription())
             self._trace_graph_chk.append(graph_chk)
             hbox = QHBoxLayout()
             hbox.setContentsMargins(0, 0, 0, 0)
@@ -553,15 +552,20 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._live_graph_container, 1)
         return w
 
-    def _update_graph(self) -> None:
-        """Start or stop the graph subscription based on checked traces."""
+    def _update_subscription(self) -> None:
+        """Start or stop the subscription based on active graph + stats traces."""
         graph = self._live_graph_widget if hasattr(self, "_live_graph_widget") else None
         if graph is None or self._rpc is None:
             return
-        ids = [i + 1 for i in range(3) if self._trace_graph_chk[i].isChecked()]
+        ids: set[int] = set()
+        for i in range(3):
+            if self._trace_graph_chk[i].isChecked():
+                ids.add(i + 1)
+        if self._stats_trace_id is not None:
+            ids.add(self._stats_trace_id)
         if ids:
             calcs = {tid: self._trace_calc_cb[tid - 1].currentText() for tid in ids}
-            graph.start(ids, calcs)
+            graph.start(sorted(ids), calcs)
         else:
             graph.stop()
 
@@ -633,26 +637,24 @@ class MainWindow(QMainWindow):
         if checked:
             tid = btn.group().id(btn)
             self._stats_trace_id = tid
-            self._refresh_trace_stats()
-            self._stats_timer.start(1000)
+            self._update_subscription()
             btn.setText("on")
         else:
             self._stats_trace_id = None
-            self._stats_timer.stop()
             self._trace_stats_display.setText("")
+            self._update_subscription()
             btn.setText("off")
 
-    def _refresh_trace_stats(self) -> None:
+    def _on_subscription_data(self, data: dict) -> None:
+        """Handle subscription data for stats display."""
         tid = self._stats_trace_id
-        if tid is None or self._rpc is None:
+        if tid is None:
             return
-        try:
-            data = self._call("trace", "fetch_data", ids=[tid])
-        except Exception:
+        freqs = data.get("frequencies")
+        traces = data.get("traces", {})
+        vals = traces.get(str(tid))
+        if not freqs or vals is None:
             return
-
-        freqs = data["frequencies"]
-        vals = data["traces"][str(tid)]
 
         try:
             from tsanet.controller.stats import compute_stats
