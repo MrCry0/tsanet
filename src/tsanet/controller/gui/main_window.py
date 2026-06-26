@@ -8,6 +8,7 @@ from logging import LogRecord
 from PySide6.QtCore import Qt, QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDockWidget,
     QFormLayout,
@@ -71,17 +72,16 @@ class MainWindow(QMainWindow):
         self._tabs = tabs
         self._device_panel = QWidget()
         self._sweep_panel = self._build_sweep_panel()
-        self._trace_panel = self._build_trace_panel()
+        self._live_graph_panel = self._build_live_graph_panel()
         self._capture_viewer = QWidget()
-        self._live_graph = QWidget()
 
         self._SWEEP_TAB = 1
+        self._GRAPH_TAB = 2
 
         tabs.addTab(self._device_panel, "Devices")
         tabs.addTab(self._sweep_panel, "Sweep")
-        tabs.addTab(self._trace_panel, "Trace")
+        tabs.addTab(self._live_graph_panel, "Live Graph")
         tabs.addTab(self._capture_viewer, "Capture")
-        tabs.addTab(self._live_graph, "Live Graph")
         self.setCentralWidget(tabs)
 
         if config:
@@ -248,9 +248,8 @@ class MainWindow(QMainWindow):
             central.removeTab(3)
             central.insertTab(3, self._capture_viewer, "Capture")
 
-            self._live_graph = LiveGraphPanel(self._rpc)
-            central.removeTab(4)
-            central.insertTab(4, self._live_graph, "Live Graph")
+            self._live_graph_widget = LiveGraphPanel(self._rpc)
+            self._live_graph_container.layout().addWidget(self._live_graph_widget.graph)
 
             self._refresh_sweep_status()
             self._refresh_trace_state()
@@ -261,15 +260,11 @@ class MainWindow(QMainWindow):
             self._status.showMessage("Sweep tab — set range, center, span, or CW")
         elif index == 0 and self._rpc is not None:
             self._status.showMessage("Devices tab — click a device to select it")
-        elif index == 2 and self._rpc is not None:
+        elif self._GRAPH_TAB == index and self._rpc is not None:
             self._refresh_trace_state()
-            self._status.showMessage("Trace tab — toggle traces, set calc, or enable stats")
+            self._status.showMessage("Live Graph — toggle traces, set calc, graph, or stats")
         elif index == 3 and self._rpc is not None:
             self._status.showMessage("Capture tab — fetch a screenshot from the device")
-        elif index == 4 and self._rpc is not None:
-            self._status.showMessage(
-                "Live Graph — configurable trace lines, max-speed or fixed-interval updates"
-            )
 
     # -- sweep panel --------------------------------------------------------
 
@@ -436,14 +431,21 @@ class MainWindow(QMainWindow):
         except Exception:
             self._sweep_status.setText("(readback failed)")
 
-    # -- trace panel --------------------------------------------------------
+    # -- live graph panel --------------------------------------------------
 
-    def _build_trace_panel(self):
+    def _build_live_graph_panel(self):
         w = QWidget()
-        layout = QVBoxLayout(w)
+        outer = QHBoxLayout(w)
+
+        # Left: trace controls
+        ctrl = QWidget()
+        ctrl.setMaximumWidth(300)
+        ctrl_layout = QVBoxLayout(ctrl)
+        ctrl_layout.setContentsMargins(0, 0, 0, 0)
 
         self._trace_on_btn: list[QPushButton] = []
         self._trace_calc_cb: list[QComboBox] = []
+        self._trace_graph_chk: list[QCheckBox] = []
         self._trace_stats_btn: list[QPushButton] = []
         self._stats_timer = QTimer(self)
         self._stats_timer.timeout.connect(self._refresh_trace_stats)
@@ -452,6 +454,9 @@ class MainWindow(QMainWindow):
 
         stats_group = QButtonGroup(self)
         stats_group.setExclusive(True)
+
+        trace_group = QGroupBox("Traces 1 – 3")
+        trace_grid = QVBoxLayout(trace_group)
 
         for i in range(3):
             tid = i + 1
@@ -466,25 +471,31 @@ class MainWindow(QMainWindow):
             calc = QComboBox()
             calc.addItems(sorted(VALID_CALC))
             calc.setCurrentText("off")
-            calc.setToolTip(f"Calculation mode for trace {tid} — applied on selection")
+            calc.setToolTip(f"Calc mode for trace {tid} — applied on selection")
             calc.currentTextChanged.connect(lambda val, t=tid: self._trace_set_calc(t, val))
             self._trace_calc_cb.append(calc)
 
+            graph_chk = QCheckBox()
+            graph_chk.setToolTip(f"Add trace {tid} to the live graph")
+            graph_chk.toggled.connect(lambda checked, t=tid: self._update_graph())
+            self._trace_graph_chk.append(graph_chk)
+
             stats_btn = QPushButton("Stats")
             stats_btn.setCheckable(True)
-            stats_btn.setToolTip(
-                f"Show auto-updating statistics for trace {tid} (only one at a time)"
-            )
+            stats_btn.setToolTip(f"Show auto-updating stats for trace {tid} (only one at a time)")
             stats_btn.pressed.connect(lambda b=stats_btn: self._stats_clicked(b))
             stats_group.addButton(stats_btn, tid)
             self._trace_stats_btn.append(stats_btn)
 
             row.addWidget(on_btn)
             row.addWidget(calc)
+            row.addWidget(graph_chk)
             row.addWidget(stats_btn)
-            layout.addLayout(row)
+            trace_grid.addLayout(row)
 
         stats_group.buttonToggled.connect(self._on_stats_toggled)
+
+        ctrl_layout.addWidget(trace_group)
 
         self._trace_stats_display = QLabel("")
         self._trace_stats_display.setWordWrap(True)
@@ -492,10 +503,29 @@ class MainWindow(QMainWindow):
         self._trace_stats_display.setStyleSheet(
             "QLabel { font-family: monospace; font-size: 11px; }"
         )
-        layout.addWidget(self._trace_stats_display)
+        ctrl_layout.addWidget(self._trace_stats_display)
+        ctrl_layout.addStretch()
 
-        layout.addStretch()
+        # Right: graph placeholder (filled in _connect)
+        self._live_graph_container = QWidget()
+        self._live_graph_container.setLayout(QVBoxLayout())
+        self._live_graph_container.layout().setContentsMargins(0, 0, 0, 0)
+
+        outer.addWidget(ctrl)
+        outer.addWidget(self._live_graph_container, 1)
         return w
+
+    def _update_graph(self) -> None:
+        """Start or stop the graph subscription based on checked traces."""
+        graph = self._live_graph_widget if hasattr(self, "_live_graph_widget") else None
+        if graph is None or self._rpc is None:
+            return
+        ids = [i + 1 for i in range(3) if self._trace_graph_chk[i].isChecked()]
+        if ids:
+            calcs = {tid: self._trace_calc_cb[tid - 1].currentText() for tid in ids}
+            graph.start(ids, calcs)
+        else:
+            graph.stop()
 
     def _refresh_trace_state(self) -> None:
         """Read current trace state from the device and update the UI."""
