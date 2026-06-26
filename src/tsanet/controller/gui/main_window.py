@@ -572,14 +572,21 @@ class MainWindow(QMainWindow):
         if graph is None or self._rpc is None:
             return
         ids: set[int] = set()
+        graph_set: set[int] = set()
         for i in range(3):
             if self._trace_graph_chk[i].isChecked():
                 ids.add(i + 1)
+                graph_set.add(i + 1)
         if self._stats_trace_id is not None:
             ids.add(self._stats_trace_id)
         if ids:
             calcs = {tid: self._trace_calc_cb[tid - 1].currentText() for tid in ids}
-            graph.start(sorted(ids), calcs, interval_ms=self._refresh_interval_ms)
+            graph.start(
+                sorted(ids),
+                calcs,
+                graph_ids=sorted(graph_set) if graph_set else None,
+                interval_ms=self._refresh_interval_ms,
+            )
         else:
             graph.stop()
 

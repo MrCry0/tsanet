@@ -65,11 +65,22 @@ class LiveGraphPanel(QWidget):
         """Register or clear a callback receiving every subscription payload."""
         self._data_cb = cb
 
-    def start(self, ids: list[int], calcs: dict[int, str], *, interval_ms: int = 250) -> None:
+    def start(
+        self,
+        ids: list[int],
+        calcs: dict[int, str],
+        *,
+        graph_ids: list[int] | None = None,
+        interval_ms: int = 250,
+    ) -> None:
         """Begin live graphing for *ids* with the given calc modes.
 
+        *ids* is the set of traces to subscribe to (graph + stats union).
+        *graph_ids* is the subset that should appear as curves on the plot.
         *interval_ms* is the subscription push interval in milliseconds.
         """
+        if graph_ids is None:
+            graph_ids = ids
         if self._running:
             self.stop()
 
@@ -84,9 +95,10 @@ class LiveGraphPanel(QWidget):
 
         self._plot.clear()
         colors = [(255, 100, 100), (100, 255, 100), (100, 100, 255)]
+        graph_set = set(graph_ids)
         for i in range(3):
             tid = i + 1
-            if tid in ids:
+            if tid in graph_set:
                 curve = self._plot.plot([], [], pen=pg.mkPen(color=colors[i], width=1.5))
                 self._curves[i] = curve
             else:
