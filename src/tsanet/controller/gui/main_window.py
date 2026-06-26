@@ -650,9 +650,17 @@ class MainWindow(QMainWindow):
         if tid is None:
             return
         freqs = data.get("frequencies")
+        if freqs:
+            self._last_freqs = freqs
+        else:
+            freqs = getattr(self, "_last_freqs", None)
+        if not freqs:
+            return
         traces = data.get("traces", {})
         vals = traces.get(str(tid))
-        if not freqs or vals is None:
+        if vals is None:
+            return
+        if len(vals) != len(freqs):
             return
 
         try:
