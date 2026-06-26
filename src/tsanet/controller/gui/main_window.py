@@ -585,8 +585,12 @@ class MainWindow(QMainWindow):
             self._trace_stats_display.setText(f"Stats error: {exc}")
             return
 
+        calc = self._trace_calc_cb[tid - 1].currentText()
+        start_hz = freqs[0]
+        stop_hz = freqs[-1]
+
         self._trace_stats_display.setText(
-            f"Trace {tid}\n"
+            f"Trace {tid}  Mode: {calc}  {_fmt(start_hz)} – {_fmt(stop_hz)}\n"
             f"  Channel power      : {result.channel_power:.1f} dBm\n"
             f"  Average            : {result.average:.1f} dBm\n"
             f"  Median             : {result.median:.1f} dBm\n"
