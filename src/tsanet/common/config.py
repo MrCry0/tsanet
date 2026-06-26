@@ -81,3 +81,11 @@ def load_yaml(path: str | Path | None) -> dict[str, Any]:
         return {}
     with file.open() as handle:
         return yaml.safe_load(handle) or {}
+
+
+def save_yaml(path: str | Path, data: dict[str, Any]) -> None:
+    """Write *data* to *path* as YAML, creating directories as needed."""
+    file = Path(path)
+    file.parent.mkdir(parents=True, exist_ok=True)
+    with file.open("w") as handle:
+        yaml.safe_dump(data, handle, default_flow_style=False, sort_keys=False)

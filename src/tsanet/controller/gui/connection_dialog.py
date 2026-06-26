@@ -2,24 +2,30 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
 )
 
 from tsanet.common.config import NetworkConfig, SecurityConfig
-from tsanet.controller.config import ControllerConfig
+from tsanet.controller.config import ControllerConfig, DEFAULT_CONFIG_PATH
 
 
 class ConnectionDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, config_path: str | Path | None = None, parent=None):
         super().__init__(parent)
+        self._config_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
         self.setWindowTitle("Connect to Hub")
         self.setMinimumWidth(360)
 
@@ -57,6 +63,24 @@ class ConnectionDialog(QDialog):
         form.addRow("Port:", self._port)
         form.addRow("Token:", self._token)
 
+        # Save / Save As
+        save_btn = QPushButton("Save")
+        save_btn.setToolTip(
+            f"Save to {'existing' if self._config_path.exists() else 'new'} config file:\n"
+            f"{self._config_path}"
+        )
+        save_btn.clicked.connect(self._save)
+
+        save_as_btn = QPushButton("Save As…")
+        save_as_btn.setToolTip("Save to a different config file")
+        save_as_btn.clicked.connect(self._save_as)
+
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(save_btn)
+        btn_row.addWidget(save_as_btn)
+        btn_row.addStretch()
+
+        # OK / Cancel
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -64,6 +88,7 @@ class ConnectionDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Network settings"))
         layout.addLayout(form)
+        layout.addLayout(btn_row)
         layout.addStretch()
         layout.addWidget(buttons)
 
@@ -88,3 +113,14 @@ class ConnectionDialog(QDialog):
                 token=token,
             ),
         )
+
+    def _save(self) -> None:
+        self.config().save(self._config_path)
+
+    def _save_as(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Config As", str(self._config_path), "YAML (*.yaml *.yml)"
+        )
+        if path:
+            self._config_path = Path(path)
+            self.config().save(self._config_path)

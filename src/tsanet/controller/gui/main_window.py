@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from tsanet import __version__
+from tsanet.controller.config import DEFAULT_CONFIG_PATH
 from tsanet.controller.gui.capture_viewer import CaptureViewer
 from tsanet.controller.gui.connection_dialog import ConnectionDialog
 from tsanet.controller.gui.device_panel import DevicePanel
@@ -54,11 +55,12 @@ class _LogHandler(logging.Handler):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, config=None):
+    def __init__(self, config=None, config_path=None):
         super().__init__()
         self.setWindowTitle("tsanet Controller")
         self.setMinimumSize(900, 600)
         self._rpc: RpcClient | None = None
+        self._config_path = config_path
 
         self._status = QStatusBar()
         self.setStatusBar(self._status)
@@ -218,7 +220,23 @@ class MainWindow(QMainWindow):
     # -- connection ---------------------------------------------------------
 
     def _show_connection_dialog(self):
-        dlg = ConnectionDialog(self)
+        from tsanet.controller.config import ControllerConfig
+
+        dlg = ConnectionDialog(config_path=self._config_path, parent=self)
+
+        # Pre-populate from an existing config file.
+        try:
+            cfg = ControllerConfig.load(self._config_path or DEFAULT_CONFIG_PATH)
+            dlg._mode.setCurrentText(cfg.network.mode)
+            dlg._transport.setCurrentText(cfg.network.transport)
+            dlg._address.setText(cfg.network.address)
+            if cfg.network.port is not None:
+                dlg._port.setValue(cfg.network.port)
+            if cfg.security.token:
+                dlg._token.setText(cfg.security.token)
+        except Exception:
+            pass
+
         if dlg.exec():
             self._connect(dlg.config())
         else:

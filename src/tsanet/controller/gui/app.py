@@ -25,6 +25,7 @@ def main() -> None:
     parser.add_argument(
         "--debug", action="store_true", help="Show detailed debug output (implies --verbose)"
     )
+    parser.add_argument("--config", "-c", help="Path to controller config YAML")
     args, remaining = parser.parse_known_args()
 
     level = logging.WARNING
@@ -35,7 +36,7 @@ def main() -> None:
     configure_logging(level, stream=sys.stderr)
 
     app = QApplication(sys.argv[:1] + remaining)
-    window = MainWindow()
+    window = MainWindow(config_path=args.config)
     window.show()
     app.exec()
 
