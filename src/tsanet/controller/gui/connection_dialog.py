@@ -51,17 +51,29 @@ class ConnectionDialog(QDialog):
         self._port.setValue(7777)
         self._port.setToolTip("TCP port (ignored for Unix transport)")
 
+        self._sec_mode = QComboBox()
+        self._sec_mode.addItems(["none", "token", "tls-token"])
+        self._sec_mode.currentTextChanged.connect(self._on_sec_mode_changed)
+        self._sec_mode.setToolTip(
+            "none — no authentication\n"
+            "token — shared secret (authenticates, does not encrypt)\n"
+            "tls-token — TLS + token (not yet implemented)"
+        )
+
         self._token = QLineEdit()
-        self._token.setToolTip("Shared secret for token authentication (leave empty if not used)")
+        self._token.setToolTip("Shared secret for token authentication")
         self._token.setEchoMode(QLineEdit.EchoMode.Password)
         self._token.setPlaceholderText("(none)")
 
-        form = QFormLayout()
-        form.addRow("Mode:", self._mode)
-        form.addRow("Transport:", self._transport)
-        form.addRow("Address:", self._address)
-        form.addRow("Port:", self._port)
-        form.addRow("Token:", self._token)
+        self._form = QFormLayout()
+        self._form.addRow("Mode:", self._mode)
+        self._form.addRow("Transport:", self._transport)
+        self._form.addRow("Address:", self._address)
+        self._form.addRow("Port:", self._port)
+        self._form.addRow("Security:", self._sec_mode)
+        self._token_label = QLabel("Token:")
+        self._form.addRow(self._token_label, self._token)
+        self._on_sec_mode_changed(self._sec_mode.currentText())
 
         # Save / Save As
         save_btn = QPushButton("Save")
@@ -87,7 +99,7 @@ class ConnectionDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Network settings"))
-        layout.addLayout(form)
+        layout.addLayout(self._form)
         layout.addLayout(btn_row)
         layout.addStretch()
         layout.addWidget(buttons)
@@ -99,8 +111,14 @@ class ConnectionDialog(QDialog):
         else:
             self._address.setPlaceholderText("127.0.0.1")
 
+    def _on_sec_mode_changed(self, mode: str) -> None:
+        visible = mode in ("token", "tls-token")
+        self._token_label.setVisible(visible)
+        self._token.setVisible(visible)
+
     def config(self) -> ControllerConfig:
-        token = self._token.text().strip() or None
+        sec_mode = self._sec_mode.currentText()
+        token = self._token.text().strip() or None if sec_mode != "none" else None
         return ControllerConfig(
             network=NetworkConfig(
                 mode=self._mode.currentText(),  # type: ignore[arg-type]
@@ -109,7 +127,7 @@ class ConnectionDialog(QDialog):
                 port=self._port.value() if self._transport.currentText() == "tcp" else None,
             ),
             security=SecurityConfig(
-                mode="token" if token else "none",
+                mode=sec_mode,  # type: ignore[arg-type]
                 token=token,
             ),
         )

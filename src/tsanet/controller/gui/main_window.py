@@ -232,6 +232,7 @@ class MainWindow(QMainWindow):
             dlg._address.setText(cfg.network.address)
             if cfg.network.port is not None:
                 dlg._port.setValue(cfg.network.port)
+            dlg._sec_mode.setCurrentText(cfg.security.mode)
             if cfg.security.token:
                 dlg._token.setText(cfg.security.token)
         except Exception:
