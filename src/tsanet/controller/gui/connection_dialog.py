@@ -75,6 +75,13 @@ class ConnectionDialog(QDialog):
         self._form.addRow(self._token_label, self._token)
         self._on_sec_mode_changed(self._sec_mode.currentText())
 
+        self._refresh_ms = QSpinBox()
+        self._refresh_ms.setRange(25, 10000)
+        self._refresh_ms.setValue(250)
+        self._refresh_ms.setSuffix(" ms")
+        self._refresh_ms.setToolTip("Graph and stats refresh interval (25-10000 ms)")
+        self._form.addRow("Refresh:", self._refresh_ms)
+
         # Save / Save As
         save_btn = QPushButton("Save")
         save_btn.setToolTip(
@@ -130,6 +137,7 @@ class ConnectionDialog(QDialog):
                 mode=sec_mode,  # type: ignore[arg-type]
                 token=token,
             ),
+            refresh_interval_ms=self._refresh_ms.value(),
         )
 
     def _save(self) -> None:

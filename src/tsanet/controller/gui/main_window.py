@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSpinBox,
     QStatusBar,
     QTabWidget,
     QVBoxLayout,
@@ -235,6 +236,7 @@ class MainWindow(QMainWindow):
             dlg._sec_mode.setCurrentText(cfg.security.mode)
             if cfg.security.token:
                 dlg._token.setText(cfg.security.token)
+            dlg._refresh_ms.setValue(cfg.refresh_interval_ms)
         except Exception:
             pass
 
@@ -256,6 +258,11 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Connection Error", str(exc))
             return
+
+        # Read refresh interval from the config that was just used to connect.
+        self._refresh_interval_ms = config.refresh_interval_ms
+        if hasattr(self, "_refresh_spin"):
+            self._refresh_spin.setValue(self._refresh_interval_ms)
 
         central = self.centralWidget()
         if isinstance(central, QTabWidget):
@@ -469,6 +476,7 @@ class MainWindow(QMainWindow):
         self._trace_stats_btn: list[QPushButton] = []
         self._stats_trace_id: int | None = None
         self._trace_refresh_blocked = False
+        self._refresh_interval_ms = 250
 
         trace_group = QGroupBox("Traces")
         trace_grid = QGridLayout(trace_group)
@@ -529,6 +537,18 @@ class MainWindow(QMainWindow):
 
         ctrl_layout.addWidget(trace_group)
 
+        interval_row = QHBoxLayout()
+        interval_row.addWidget(QLabel("Refresh:"))
+        self._refresh_spin = QSpinBox()
+        self._refresh_spin.setRange(25, 10000)
+        self._refresh_spin.setValue(self._refresh_interval_ms)
+        self._refresh_spin.setSuffix(" ms")
+        self._refresh_spin.setToolTip("Graph and stats refresh interval (25-10000 ms)")
+        self._refresh_spin.valueChanged.connect(self._on_refresh_interval_changed)
+        interval_row.addWidget(self._refresh_spin)
+        interval_row.addStretch()
+        ctrl_layout.addLayout(interval_row)
+
         self._trace_stats_display = QLabel("")
         self._trace_stats_display.setWordWrap(True)
         self._trace_stats_display.setMinimumHeight(120)
@@ -547,6 +567,11 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._live_graph_container, 1)
         return w
 
+    def _on_refresh_interval_changed(self, ms: int) -> None:
+        self._refresh_interval_ms = ms
+        if hasattr(self, "_live_graph_widget"):
+            self._update_subscription()
+
     def _update_subscription(self) -> None:
         """Start or stop the subscription based on active graph + stats traces."""
         graph = self._live_graph_widget if hasattr(self, "_live_graph_widget") else None
@@ -560,7 +585,7 @@ class MainWindow(QMainWindow):
             ids.add(self._stats_trace_id)
         if ids:
             calcs = {tid: self._trace_calc_cb[tid - 1].currentText() for tid in ids}
-            graph.start(sorted(ids), calcs)
+            graph.start(sorted(ids), calcs, interval_ms=self._refresh_interval_ms)
         else:
             graph.stop()
 

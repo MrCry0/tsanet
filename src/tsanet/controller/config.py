@@ -17,6 +17,9 @@ DEFAULT_CONFIG_PATH = Path.home() / ".config" / "tsanet" / "controller.yaml"
 class ControllerConfig(BaseModel):
     network: NetworkConfig = Field(default_factory=lambda: NetworkConfig(mode="dial"))
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    refresh_interval_ms: int = Field(
+        default=250, ge=10, description="Graph/stats update interval in milliseconds"
+    )
 
     @classmethod
     def load(cls, path: str | Path | None = DEFAULT_CONFIG_PATH) -> ControllerConfig:

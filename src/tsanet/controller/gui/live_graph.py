@@ -65,8 +65,11 @@ class LiveGraphPanel(QWidget):
         """Register or clear a callback receiving every subscription payload."""
         self._data_cb = cb
 
-    def start(self, ids: list[int], calcs: dict[int, str]) -> None:
-        """Begin live graphing for *ids* with the given calc modes."""
+    def start(self, ids: list[int], calcs: dict[int, str], *, interval_ms: int = 250) -> None:
+        """Begin live graphing for *ids* with the given calc modes.
+
+        *interval_ms* is the subscription push interval in milliseconds.
+        """
         if self._running:
             self.stop()
 
@@ -89,11 +92,10 @@ class LiveGraphPanel(QWidget):
             else:
                 self._curves[i] = None
 
-        # Register the callback before subscribing so the first events
-        # are not lost.
+        interval_sec = interval_ms / 1000.0 if interval_ms > 0 else None
         self._running = True
         self._rpc.on_event(self._on_reader_event)
-        self._rpc.call("trace", "subscribe", ids=ids, interval=None)
+        self._rpc.call("trace", "subscribe", ids=ids, interval=interval_sec)
 
     def stop(self) -> None:
         """End the subscription and clear the graph."""
