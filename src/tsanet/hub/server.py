@@ -56,18 +56,20 @@ class HubServer:
             self._config.network.transport,
             self._config.security.mode,
         )
-        # Build the security provider before starting anything else, so a
-        # misconfigured/unimplemented mode fails fast with nothing to tear down.
         security = self._config.security.build_provider()
-
-        self._poller.start()
-        logger.info("device poller started (interval=%.1fs)", self._config.poll_interval)
 
         endpoint = self._config.network.endpoint()
 
         if self._config.network.mode == "listen":
             self._listener = listen(endpoint, security)
             logger.info("listening on %s", self._describe(endpoint))
+
+        # Start device scanning in the background — it must not block
+        # the hub from accepting connections.
+        self._poller.start()
+        logger.info("device poller started (interval=%.1fs)", self._config.poll_interval)
+
+        if self._config.network.mode == "listen":
             self._running = True
             self._accept_loop()
         else:

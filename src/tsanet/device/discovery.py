@@ -81,11 +81,14 @@ def _close(port: SerialPort) -> None:
 def list_serial_ports() -> list[str]:
     """List candidate serial port device names using pyserial.
 
+    Only ports matching ``/dev/ttyACM*`` are returned — those are the
+    USB CDC ACM devices that the tinySA presents as.
+
     Requires the ``hub`` extra (pyserial).
     """
     from serial.tools import list_ports
 
-    return [port.device for port in list_ports.comports()]
+    return [port.device for port in list_ports.comports() if "/dev/ttyACM" in port.device]
 
 
 def open_serial_port(name: str, *, baudrate: int = 115200, timeout: float = 1.0) -> SerialPort:

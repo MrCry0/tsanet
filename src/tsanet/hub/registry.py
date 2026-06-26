@@ -130,7 +130,11 @@ class DeviceRegistry:
 
 
 class RegistryPoller:
-    """Runs :meth:`DeviceRegistry.scan` immediately, then every ``interval``."""
+    """Runs :meth:`DeviceRegistry.scan` in a background thread.
+
+    The first scan happens immediately when the thread starts; subsequent
+    scans run every ``interval`` seconds.
+    """
 
     def __init__(self, registry: DeviceRegistry, interval: float) -> None:
         if interval <= 0:
@@ -141,13 +145,13 @@ class RegistryPoller:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        self._registry.scan()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def _run(self) -> None:
-        while not self._stop.wait(self._interval):
+        while not self._stop.is_set():
             self._registry.scan()
+            self._stop.wait(self._interval)
 
     def stop(self) -> None:
         self._stop.set()
