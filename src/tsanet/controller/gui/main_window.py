@@ -504,13 +504,20 @@ class MainWindow(QMainWindow):
             raw = str(self._call("trace", "get_all"))
         except Exception:
             return
+        import logging
+
+        logging.getLogger("tsanet.gui").debug("trace.get_all response: %r", raw)
         self._trace_refresh_blocked = True
         try:
             for line in raw.strip().splitlines():
+                logging.getLogger("tsanet.gui").debug("parse trace line: %r", line)
                 parts = line.replace(",", " ").split()
                 if len(parts) < 3:
                     continue
-                idx = int(parts[0])
+                try:
+                    idx = int(parts[0])
+                except ValueError:
+                    continue
                 on = parts[1] in ("1", "on", "ON")
                 calc = parts[2]
                 if 0 <= idx < 3:
