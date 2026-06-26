@@ -79,8 +79,6 @@ class LiveGraphPanel(QWidget):
             except Exception:
                 pass
 
-        self._rpc.call("trace", "subscribe", ids=ids, interval=None)
-
         self._plot.clear()
         colors = [(255, 100, 100), (100, 255, 100), (100, 100, 255)]
         for i in range(3):
@@ -91,8 +89,11 @@ class LiveGraphPanel(QWidget):
             else:
                 self._curves[i] = None
 
+        # Register the callback before subscribing so the first events
+        # are not lost.
         self._running = True
         self._rpc.on_event(self._on_reader_event)
+        self._rpc.call("trace", "subscribe", ids=ids, interval=None)
 
     def stop(self) -> None:
         """End the subscription and clear the graph."""
