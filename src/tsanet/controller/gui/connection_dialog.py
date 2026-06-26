@@ -137,7 +137,11 @@ class ConnectionDialog(QDialog):
 
     def _save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save Config As", str(self._config_path), "YAML (*.yaml *.yml)"
+            self,
+            "Save Config As",
+            str(self._config_path),
+            "YAML (*.yaml *.yml)",
+            options=QFileDialog.DontUseNativeDialog,
         )
         if path:
             self._config_path = Path(path)

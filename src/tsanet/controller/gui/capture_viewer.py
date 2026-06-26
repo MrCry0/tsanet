@@ -69,7 +69,13 @@ class CaptureViewer(QWidget):
     def save_file(self):
         if self._png is None:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save Screenshot", "SA.png", "PNG (*.png)")
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Screenshot",
+            "SA.png",
+            "PNG (*.png)",
+            options=QFileDialog.DontUseNativeDialog,
+        )
         if path:
             with open(path, "wb") as f:
                 f.write(self._png)
