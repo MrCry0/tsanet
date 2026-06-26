@@ -8,6 +8,7 @@ variable; ``Event`` messages are dispatched to the registered callback.
 from __future__ import annotations
 
 import logging
+import socket
 import threading
 import time
 from collections.abc import Callable
@@ -18,6 +19,8 @@ from tsanet.protocol.messages import Event, Request, Response, Status
 from tsanet.protocol.transport import Connection, Listener, dial, listen
 
 logger = logging.getLogger("tsanet.rpc")
+
+_RECV_TIMEOUT = 3.0
 
 
 class RpcError(TransportError):
@@ -48,6 +51,7 @@ class RpcClient:
 
         self._reader: threading.Thread | None = None
         self._running = False
+        self._error: Exception | None = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -66,7 +70,17 @@ class RpcClient:
         else:
             self._connection = dial(endpoint, security)
 
+        # Set a receive timeout and TCP keepalive so we detect hub death
+        # within seconds rather than hanging indefinitely.
+        sock = self._connection._sock
+        sock.settimeout(_RECV_TIMEOUT)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 3)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 2)
+
         logger.info("connection established to hub")
+        self._error = None
         self._running = True
         self._reader = threading.Thread(target=self._reader_loop, daemon=True)
         self._reader.start()
@@ -75,7 +89,6 @@ class RpcClient:
     def close(self) -> None:
         """Stop the reader thread and close the connection."""
         self._running = False
-        # Wake pending call()s so they don't hang.
         with self._pending_cond:
             self._pending_cond.notify_all()
         if self._reader is not None:
@@ -104,17 +117,24 @@ class RpcClient:
         event callback.
 
         Raises :class:`RpcError` if the hub returns an error.
+        Raises :class:`ConnectionClosed` if the connection dies.
         """
         with self._lock:
             conn = self._connection
             if conn is None:
                 raise TransportError("not connected")
+            if self._error is not None:
+                raise self._error
             req_id = self._next_id
             self._next_id += 1
             req = Request(id=req_id, domain=domain, op=op, args=args)
             logger.debug("TX req #%d: %s.%s args=%s", req_id, domain, op, args)
             t0 = time.monotonic()
-            conn.send(req)
+            try:
+                conn.send(req)
+            except Exception as exc:
+                self._record_error(exc)
+                raise
 
         with self._pending_cond:
             while req_id not in self._pending:
@@ -135,10 +155,12 @@ class RpcClient:
         while self._running:
             try:
                 msg = self._connection.recv()  # type: ignore[union-attr]
+            except socket.timeout:
+                continue
             except Exception as exc:
                 if self._running:
                     logger.debug("reader loop error: %s", exc)
-                    self._dispatch_error(exc)
+                    self._record_error(exc)
                 break
 
             if isinstance(msg, Response):
@@ -161,16 +183,18 @@ class RpcClient:
 
         logger.debug("reader loop stopped")
 
+    def _record_error(self, exc: Exception) -> None:
+        """Record a fatal error and unblock all pending callers."""
+        self._error = exc
+        with self._pending_cond:
+            for rid in list(self._pending):
+                self._pending[rid] = exc
+            self._pending_cond.notify_all()
+
     def _dispatch_response(self, resp: Response) -> None:
         with self._pending_cond:
             if resp.status == Status.ERROR:
                 self._pending[resp.id] = RpcError(resp.error or "unknown error")
             else:
                 self._pending[resp.id] = resp.data
-            self._pending_cond.notify_all()
-
-    def _dispatch_error(self, exc: Exception) -> None:
-        with self._pending_cond:
-            for rid in list(self._pending):
-                self._pending[rid] = exc
             self._pending_cond.notify_all()
