@@ -107,6 +107,7 @@ class HubServer:
                 break
             logger.info("accepted connection")
             threading.Thread(target=self._serve, args=(connection,), daemon=True).start()
+            logger.debug("serve thread started")
 
     def _dial_loop(self, endpoint: Any, security: Any) -> None:
         while self._running:
@@ -129,7 +130,9 @@ class HubServer:
             peer = str(connection._sock.getpeername())
             transport = self._config.network.transport
             self._sessions.admit(connection, peer=peer, transport=transport)
+            logger.debug("session admitted: peer=%s", peer)
             self._auto_select_device()
+            logger.debug("device auto-select complete")
         except SessionBusy as exc:
             connection.send(Response(id=0, status=Status.ERROR, error=str(exc)))
             connection.close()
@@ -153,6 +156,7 @@ class HubServer:
             connection.close()
 
     def _request_loop(self, connection: Connection) -> None:
+        logger.debug("entering request loop")
         while self._running:
             msg = connection.recv()
             if isinstance(msg, Request):
