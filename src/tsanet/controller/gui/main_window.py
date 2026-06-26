@@ -464,7 +464,6 @@ class MainWindow(QMainWindow):
         ctrl_layout = QVBoxLayout(ctrl)
         ctrl_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._trace_on_btn: list[QPushButton] = []
         self._trace_calc_cb: list[QComboBox] = []
         self._trace_graph_chk: list[QCheckBox] = []
         self._trace_stats_btn: list[QPushButton] = []
@@ -478,7 +477,7 @@ class MainWindow(QMainWindow):
         trace_grid.setHorizontalSpacing(8)
 
         # Column headers.
-        for col, name in enumerate(["#", "Mode", "State", "Graph", "Stats"]):
+        for col, name in enumerate(["#", "Mode", "Graph", "Stats"]):
             hdr = QLabel(name)
             hdr.setStyleSheet("font-weight: bold")
             hdr.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -500,16 +499,9 @@ class MainWindow(QMainWindow):
             self._trace_calc_cb.append(calc)
             trace_grid.addWidget(calc, row, 1)
 
-            on_btn = QPushButton("off")
-            on_btn.setCheckable(True)
-            on_btn.setToolTip(f"Toggle trace {tid} on/off")
-            on_btn.toggled.connect(lambda checked, t=tid: self._trace_set_enabled(t, checked))
-            self._trace_on_btn.append(on_btn)
-            trace_grid.addWidget(on_btn, row, 2)
-
             graph_chk = QCheckBox()
             graph_chk.setToolTip(f"Add trace {tid} to the live graph")
-            graph_chk.toggled.connect(lambda checked, t=tid: self._update_subscription())
+            graph_chk.toggled.connect(lambda checked, t=tid: self._on_graph_toggled(t, checked))
             self._trace_graph_chk.append(graph_chk)
             hbox = QHBoxLayout()
             hbox.setContentsMargins(0, 0, 0, 0)
@@ -518,7 +510,7 @@ class MainWindow(QMainWindow):
             hbox.addStretch()
             cw = QWidget()
             cw.setLayout(hbox)
-            trace_grid.addWidget(cw, row, 3)
+            trace_grid.addWidget(cw, row, 2)
 
             stats_btn = QPushButton("off")
             stats_btn.setCheckable(True)
@@ -527,7 +519,7 @@ class MainWindow(QMainWindow):
                 lambda checked, t=tid, b=None: self._on_stats_toggled(t, checked)
             )
             self._trace_stats_btn.append(stats_btn)
-            trace_grid.addWidget(stats_btn, row, 4)
+            trace_grid.addWidget(stats_btn, row, 3)
 
         ctrl_layout.addWidget(trace_group)
 
@@ -612,11 +604,8 @@ class MainWindow(QMainWindow):
                     idx = int(parts[0])
                 except ValueError:
                     continue
-                on = parts[1] in ("1", "on", "ON")
                 calc = parts[2]
                 if 0 <= idx < 3:
-                    self._trace_on_btn[idx].setChecked(on)
-                    self._trace_on_btn[idx].setText("on" if on else "off")
                     if calc in VALID_CALC:
                         self._trace_calc_cb[idx].setCurrentText(calc)
         finally:
@@ -624,22 +613,23 @@ class MainWindow(QMainWindow):
 
     # -- trace actions ------------------------------------------------------
 
-    def _trace_set_enabled(self, tid: int, on: bool) -> None:
+    def _on_graph_toggled(self, tid: int, checked: bool) -> None:
+        self._trace_manage_enabled(tid)
+        self._update_subscription()
+
+    def _trace_manage_enabled(self, tid: int) -> None:
+        """Enable or disable the device trace based on graph/stats state."""
         if self._rpc is None or self._trace_refresh_blocked:
             return
+        graph_on = self._trace_graph_chk[tid - 1].isChecked()
+        stats_on = self._stats_trace_id == tid
         try:
-            if on:
+            if graph_on or stats_on:
                 self._call("trace", "enable", id=tid)
             else:
                 self._call("trace", "disable", id=tid)
-            self._trace_on_btn[tid - 1].setText("on" if on else "off")
-        except Exception as exc:
-            QMessageBox.critical(self, "Error", str(exc))
-            # Revert the button state
-            self._trace_refresh_blocked = True
-            self._trace_on_btn[tid - 1].setChecked(not on)
-            self._trace_on_btn[tid - 1].setText("on" if not on else "off")
-            self._trace_refresh_blocked = False
+        except Exception:
+            pass
 
     def _trace_set_calc(self, tid: int, calc: str) -> None:
         if self._rpc is None or not calc or self._trace_refresh_blocked:
@@ -660,7 +650,9 @@ class MainWindow(QMainWindow):
                 self._trace_stats_btn[old_tid - 1].setChecked(False)
                 self._trace_stats_btn[old_tid - 1].setText("off")
                 self._trace_refresh_blocked = False
+                self._trace_manage_enabled(old_tid)
             self._stats_trace_id = tid
+            self._trace_manage_enabled(tid)
             self._update_subscription()
             self._trace_stats_btn[tid - 1].setText("on")
         else:
@@ -668,6 +660,7 @@ class MainWindow(QMainWindow):
                 self._stats_trace_id = None
                 self._trace_stats_display.setText("")
                 self._update_subscription()
+                self._trace_manage_enabled(tid)
             self._trace_stats_btn[tid - 1].setText("off")
 
     def _on_subscription_data(self, data: dict) -> None:
