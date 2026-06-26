@@ -6,7 +6,12 @@ exercised directly without instantiating a QMainWindow or QApplication.
 
 from __future__ import annotations
 
-from tsanet.controller.gui.main_window import MainWindow
+import pytest
+
+try:
+    from tsanet.controller.gui.main_window import MainWindow
+except ImportError as exc:
+    pytest.skip(f"PySide6 not importable: {exc}", allow_module_level=True)
 
 
 def test_no_warning_when_nothing_requested():
