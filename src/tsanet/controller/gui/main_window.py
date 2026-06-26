@@ -236,7 +236,6 @@ class MainWindow(QMainWindow):
             dlg._sec_mode.setCurrentText(cfg.security.mode)
             if cfg.security.token:
                 dlg._token.setText(cfg.security.token)
-            dlg._refresh_ms.setValue(cfg.refresh_interval_ms)
         except Exception:
             pass
 
@@ -258,11 +257,6 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Connection Error", str(exc))
             return
-
-        # Read refresh interval from the config that was just used to connect.
-        self._refresh_interval_ms = config.refresh_interval_ms
-        if hasattr(self, "_refresh_spin"):
-            self._refresh_spin.setValue(self._refresh_interval_ms)
 
         central = self.centralWidget()
         if isinstance(central, QTabWidget):
