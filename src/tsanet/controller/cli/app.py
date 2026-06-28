@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import datetime
+import enum
 import io
 import logging
 import sys
@@ -22,6 +23,8 @@ except ImportError:
         "or reinstall:      pip install --force-reinstall tsanet"
     )
 
+from typer._click.globals import get_current_context
+
 from tsanet.common.config import NetworkConfig
 from tsanet.common.errors import AuthenticationError, ConnectionClosed, SecurityNotImplementedError
 from tsanet.common.logging import configure as configure_logging
@@ -30,6 +33,65 @@ from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient, RpcError
 from tsanet.controller.stats import compute_stats
 from tsanet.device.model import VALID_CALC, VALID_UNITS
+
+
+# -- help formatting -------------------------------------------------------
+
+
+def _get_help(ctx) -> str:
+    """Return the full help text for the current command.
+
+    Builds the help string from the command's parameter metadata so the
+    caller can display it without relying on Click's internal formatting.
+    """
+    cmd = ctx.command
+    path = ctx.command_path if hasattr(ctx, "command_path") else cmd.name
+
+    lines = [f"Usage: {path}"]
+    for p in cmd.get_params(ctx):
+        if getattr(p, "hidden", False):
+            continue
+        if p.name == "help":
+            continue
+        flags = ", ".join(p.opts)
+        lines.append(f"  {flags:<24s} {p.help or ''}{' [required]' if p.required else ''}")
+
+    desc = (cmd.help or "").strip()
+    if desc:
+        lines.append("")
+        lines.append(f"  {desc}")
+
+    return "\n".join(lines)
+
+
+# -- enum types for Typer validation --------------------------------------
+
+
+class NetworkMode(str, enum.Enum):
+    listen = "listen"
+    dial = "dial"
+
+
+class TransportKind(str, enum.Enum):
+    tcp = "tcp"
+    unix = "unix"
+
+
+class SpurMode(str, enum.Enum):
+    on = "on"
+    off = "off"
+    auto = "auto"
+
+
+class LnaMode(str, enum.Enum):
+    on = "on"
+    off = "off"
+
+
+# Dynamically create Enum types from the device model constants so they
+# stay in sync and Typer can validate against them.
+_CalcType = enum.Enum("_CalcType", {v: v for v in sorted(VALID_CALC)}, type=str)  # type: ignore[call-overload]
+_UnitType = enum.Enum("_UnitType", {v: v for v in sorted(VALID_UNITS)}, type=str)  # type: ignore[call-overload]
 
 app = typer.Typer(no_args_is_help=True)
 _client: RpcClient | None = None
@@ -55,14 +117,20 @@ def _call(domain: str, op: str, **args: object) -> object:
 
 
 def _die(msg: str) -> typer.Exit:
-    raise typer.Exit(msg)
+    try:
+        ctx = get_current_context()
+        typer.echo(_get_help(ctx), err=True)
+    except RuntimeError:
+        pass
+    typer.echo(f"Error: {msg}", err=True)
+    raise typer.Exit(code=1)
 
 
 def _freq(raw: str) -> int:
     try:
         return parse_frequency(raw)
     except ValueError as exc:
-        raise typer.Exit(str(exc)) from exc
+        _die(str(exc))
 
 
 # -- callback --------------------------------------------------------------
@@ -83,11 +151,11 @@ def _setup(
         typer.Option("--config", "-c", help="Path to controller config YAML"),
     ] = None,
     mode: Annotated[
-        Optional[str],
+        Optional[NetworkMode],
         typer.Option("--mode", help="Network mode: listen or dial"),
     ] = None,
     transport: Annotated[
-        Optional[str],
+        Optional[TransportKind],
         typer.Option("--transport", help="Network transport: tcp or unix"),
     ] = None,
     address: Annotated[
@@ -377,7 +445,8 @@ app.add_typer(marker_app, name="marker", help="Marker control")
 @marker_app.command(name="get")
 def marker_get(
     marker_id: Annotated[
-        Optional[int], typer.Option("--id", "-m", help="Marker ID (default: all)")
+        Optional[int],
+        typer.Option("--marker", "-m", help="Marker ID (default: all markers)"),
     ] = None,
 ) -> None:
     """Print marker data."""
@@ -481,7 +550,8 @@ app.add_typer(trace_app, name="trace", help="Trace control and data")
 @trace_app.command(name="get")
 def trace_get(
     trace_id: Annotated[
-        Optional[int], typer.Option("--id", "-t", help="Trace ID (default: all)")
+        Optional[int],
+        typer.Option("--trace", "-t", help="Trace ID (default: all traces)"),
     ] = None,
 ) -> None:
     """Print trace settings."""
@@ -513,10 +583,11 @@ def trace_off(
 def trace_calc(
     trace_id: Annotated[int, typer.Argument(help="Trace ID")],
     calc_type: Annotated[
-        str, typer.Argument(help=f"Calculation type: {', '.join(sorted(VALID_CALC))}")
+        _CalcType,
+        typer.Argument(help="Calculation type"),
     ],
 ) -> None:
-    """Enable a calculation (minh, maxh, maxd, aver4, aver16, aver, quasi)."""
+    """Enable a calculation mode (minh, maxh, maxd, aver4, aver16, aver, quasi)."""
     _call("trace", "enable_calc", id=trace_id, calc=calc_type)
     typer.echo(f"trace {trace_id} calc = {calc_type}")
 
@@ -532,7 +603,10 @@ def trace_calc_off(
 
 @trace_app.command(name="unit")
 def trace_unit(
-    unit: Annotated[str, typer.Argument(help=f"Unit: {', '.join(sorted(VALID_UNITS))}")],
+    unit: Annotated[
+        _UnitType,
+        typer.Argument(help="Display unit"),
+    ],
 ) -> None:
     """Set the trace display unit."""
     _call("trace", "set_unit", unit=unit)
@@ -577,7 +651,7 @@ def trace_save(
     try:
         ids = [int(s.strip()) for s in trace_ids.split(",") if s.strip()]
     except ValueError as exc:
-        raise typer.Exit(f"invalid trace ID in {trace_ids!r}: {exc}") from exc
+        _die(f"invalid trace ID in {trace_ids!r}: {exc}")
     if not ids:
         _die("at least one trace ID is required")
 
@@ -636,7 +710,7 @@ def trace_stats(
     try:
         result = compute_stats(freqs, vals, unit, start_hz, stop_hz, antenna_factor)
     except ValueError as exc:
-        raise typer.Exit(str(exc)) from exc
+        _die(str(exc))
     n = sum(1 for f in freqs if start_hz <= f <= stop_hz)
 
     typer.echo(f"Trace {trace_id} stats ({start} - {stop}, {n} points), unit: {unit}")
@@ -661,31 +735,27 @@ app.add_typer(signal_app, name="signal", help="Signal processing")
 
 @signal_app.command(name="spur")
 def signal_spur(
-    mode: Annotated[str, typer.Argument(help="on, off, or auto")],
+    mode: Annotated[
+        SpurMode,
+        typer.Argument(help="Spur suppression mode"),
+    ],
 ) -> None:
-    """Control spur suppression."""
-    if mode == "on":
-        _call("signal", "enable_spur")
-    elif mode == "off":
-        _call("signal", "disable_spur")
-    elif mode == "auto":
-        _call("signal", "enable_auto_spur")
-    else:
-        _die("mode must be on, off, or auto")
+    """Control spur suppression (on, off, or auto)."""
+    ops = {"on": "enable_spur", "off": "disable_spur", "auto": "enable_auto_spur"}
+    _call("signal", ops[mode])
     typer.echo(f"spur = {mode}")
 
 
 @signal_app.command(name="lna")
 def signal_lna(
-    mode: Annotated[str, typer.Argument(help="on or off")],
+    mode: Annotated[
+        LnaMode,
+        typer.Argument(help="LNA mode"),
+    ],
 ) -> None:
-    """Control LNA."""
-    if mode == "on":
-        _call("signal", "enable_lna")
-    elif mode == "off":
-        _call("signal", "disable_lna")
-    else:
-        _die("mode must be on or off")
+    """Control LNA (on or off)."""
+    ops = {"on": "enable_lna", "off": "disable_lna"}
+    _call("signal", ops[mode])
     typer.echo(f"lna = {mode}")
 
 
