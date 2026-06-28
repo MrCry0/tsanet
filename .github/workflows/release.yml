@@ -6,10 +6,49 @@ on:
       - "v*"
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps (Qt/EGL for PySide6)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libegl1 libgl1 libopengl0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --extra gui
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Test
+        run: uv run pytest
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify tag matches package version
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PKG_VERSION=$(python -c "exec(open('src/tsanet/__init__.py').read()); print(__version__)")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag version v${TAG_VERSION} does not match package version ${PKG_VERSION}"
+            exit 1
+          fi
+          echo "Version ${PKG_VERSION} verified against tag v${TAG_VERSION}"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
