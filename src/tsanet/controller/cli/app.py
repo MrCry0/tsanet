@@ -353,7 +353,9 @@ def sweep_start(hz: Annotated[str, typer.Argument(help="Start frequency (e.g. 10
 
 
 @sweep_app.command(name="stop")
-def sweep_stop(hz: Annotated[str, typer.Argument(help="Stop frequency")]) -> None:
+def sweep_stop(
+    hz: Annotated[str, typer.Argument(help="Stop frequency (e.g. 500mhz)")],
+) -> None:
     """Set sweep stop frequency."""
     freq = _freq(hz)
     _call("sweep", "set_stop", hz=freq)
@@ -363,7 +365,9 @@ def sweep_stop(hz: Annotated[str, typer.Argument(help="Stop frequency")]) -> Non
 
 
 @sweep_app.command(name="center")
-def sweep_center(hz: Annotated[str, typer.Argument(help="Center frequency")]) -> None:
+def sweep_center(
+    hz: Annotated[str, typer.Argument(help="Center frequency (e.g. 433.92mhz)")],
+) -> None:
     """Set sweep center frequency."""
     freq = _freq(hz)
     _call("sweep", "set_center", hz=freq)
@@ -374,7 +378,7 @@ def sweep_center(hz: Annotated[str, typer.Argument(help="Center frequency")]) ->
 
 
 @sweep_app.command(name="span")
-def sweep_span(hz: Annotated[str, typer.Argument(help="Span")]) -> None:
+def sweep_span(hz: Annotated[str, typer.Argument(help="Span (e.g. 100mhz)")]) -> None:
     """Set sweep span."""
     freq = _freq(hz)
     _call("sweep", "set_span", hz=freq)
@@ -385,7 +389,7 @@ def sweep_span(hz: Annotated[str, typer.Argument(help="Span")]) -> None:
 
 
 @sweep_app.command(name="cw")
-def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency")]) -> None:
+def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency (e.g. 433.92mhz)")]) -> None:
     """Set sweep to continuous-wave mode at a frequency."""
     freq = _freq(hz)
     _call("sweep", "set_cw", hz=freq)
@@ -396,8 +400,8 @@ def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency")]) -> None:
 
 @sweep_app.command(name="range")
 def sweep_range(
-    start: Annotated[str, typer.Argument(help="Start frequency")],
-    stop: Annotated[str, typer.Argument(help="Stop frequency")],
+    start: Annotated[str, typer.Argument(help="Start frequency (e.g. 100mhz)")],
+    stop: Annotated[str, typer.Argument(help="Stop frequency (e.g. 500mhz)")],
     points: Annotated[
         Optional[int], typer.Option("--points", "-p", help="Number of points")
     ] = None,
@@ -477,7 +481,7 @@ def marker_off(
 @marker_app.command(name="freq")
 def marker_freq(
     marker_id: Annotated[int, typer.Argument(help="Marker ID")],
-    hz: Annotated[str, typer.Argument(help="Frequency")],
+    hz: Annotated[str, typer.Argument(help="Frequency (e.g. 433.92mhz)")],
 ) -> None:
     """Set marker frequency."""
     _call("marker", "set_freq", id=marker_id, hz=_freq(hz))
@@ -688,8 +692,11 @@ def trace_save(
 def trace_stats(
     trace_id: Annotated[int, typer.Option("--trace", "-t", help="Trace ID")],
     start: Annotated[str, typer.Option("--start", help="Start frequency (e.g. 410.5mhz)")],
-    stop: Annotated[str, typer.Option("--stop", help="Stop frequency")],
-    unit: Annotated[str, typer.Option("--unit", "-u", help="Trace unit (dBm, dBmV, ...)")] = "dBm",
+    stop: Annotated[str, typer.Option("--stop", help="Stop frequency (e.g. 600mhz)")],
+    unit: Annotated[
+        _UnitType,
+        typer.Option("--unit", "-u", help="Display unit"),
+    ] = "dBm",
     antenna_factor: Annotated[
         Optional[float],
         typer.Option(
