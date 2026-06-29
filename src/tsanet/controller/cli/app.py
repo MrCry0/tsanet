@@ -283,12 +283,20 @@ def device_version() -> None:
 
 @device_app.command(name="id")
 def device_id(
-    set_id: Annotated[Optional[int], typer.Option("--set", help="Assign a new device ID")] = None,
+    new_id: Annotated[
+        Optional[int],
+        typer.Argument(help="New persistent device ID (omitting it prints the current ID)"),
+    ] = None,
 ) -> None:
-    """Get or set the device ID."""
-    if set_id is not None:
-        _call("device", "set_id", id=set_id)
-        typer.echo(f"device ID set to {set_id}")
+    """Get or set the persistent device ID.
+
+    The ID is stored on the tinySA hardware itself, so it remains stable
+    across reboots and USB port changes. Use it to target a specific
+    device on a multi-device hub regardless of its /dev/ttyACM* path.
+    """
+    if new_id is not None:
+        _call("device", "set_id", id=new_id)
+        typer.echo(f"device ID set to {new_id}")
     else:
         typer.echo(_call("device", "get_id"))
 
