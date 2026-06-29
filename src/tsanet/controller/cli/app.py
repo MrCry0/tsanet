@@ -432,10 +432,14 @@ def sweep_range(
     start: Annotated[str, typer.Argument(help="Start frequency (e.g. 100mhz)")],
     stop: Annotated[str, typer.Argument(help="Stop frequency (e.g. 500mhz)")],
     points: Annotated[
-        Optional[int], typer.Option("--points", "-p", help="Number of points")
+        Optional[int],
+        typer.Argument(help="Number of points (e.g. 450, default: device maximum)"),
     ] = None,
 ) -> None:
-    """Set sweep start, stop, and optionally point count."""
+    """Set sweep start, stop, and optionally point count.
+
+    Example: tsanet-ctl sweep range 100mhz 500mhz 450
+    """
     s = _freq(start)
     t = _freq(stop)
     _call("sweep", "set_start_stop", start=s, stop=t, points=points)
