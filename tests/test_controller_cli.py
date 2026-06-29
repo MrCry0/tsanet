@@ -15,6 +15,10 @@ from typer.testing import CliRunner
 from tsanet.controller.cli import app as cli_app
 
 
+class _Ctx:
+    invoked_subcommand = None
+
+
 @pytest.fixture(autouse=True)
 def _reset_client():
     cli_app._client = None
@@ -194,6 +198,7 @@ def test_device_option_selects_device_after_connect(monkeypatch):
     """
     monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
     cli_app._setup(
+        _Ctx(),
         config_path=None,
         mode="dial",
         transport="tcp",
@@ -210,6 +215,7 @@ def test_device_option_selects_device_after_connect(monkeypatch):
 def test_no_device_option_skips_select(monkeypatch):
     monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
     cli_app._setup(
+        _Ctx(),
         config_path=None,
         mode="dial",
         transport="tcp",
@@ -228,10 +234,21 @@ def test_command_help_does_not_connect(monkeypatch):
             raise AssertionError("help must not instantiate RpcClient")
 
     monkeypatch.setattr(cli_app, "RpcClient", ExplodingRpcClient)
-    result = CliRunner().invoke(cli_app.app, ["devices", "--help"])
+    result = CliRunner().invoke(cli_app.app, ["devices-list", "--help"])
     assert result.exit_code == 0
     assert "Usage:" in result.output
-    assert "list" in result.output
+    assert "List indexed tinySA devices" in result.output
+
+
+def test_devices_list_alias_lists_devices(monkeypatch):
+    monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
+    result = CliRunner().invoke(
+        cli_app.app,
+        ["--mode", "dial", "--transport", "tcp", "--address", "127.0.0.1", "--port", "7777", "-L"],
+    )
+    assert result.exit_code == 0
+    assert "no devices found" in result.output
+    assert _FakeRpcClient.instances[-1].calls == [("devices", "list", {})]
 
 
 class _RefusingRpcClient(_FakeRpcClient):
@@ -246,6 +263,7 @@ def test_setup_reports_unreachable_hub_cleanly(monkeypatch, capsys):
     monkeypatch.setattr(cli_app, "RpcClient", _RefusingRpcClient)
     with pytest.raises(typer.Exit) as exc_info:
         cli_app._setup(
+            _Ctx(),
             config_path=None,
             mode="dial",
             transport="tcp",

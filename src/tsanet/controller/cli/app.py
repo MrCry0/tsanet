@@ -187,8 +187,9 @@ def _resolve_log_level(verbose: bool, debug: bool) -> int:
     return logging.WARNING
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def _setup(
+    ctx: typer.Context,
     config_path: Annotated[
         Optional[str],
         typer.Option("--config", "-c", help="Path to controller config YAML"),
@@ -217,6 +218,10 @@ def _setup(
             help="Device ID to select on a hub with more than one device attached",
         ),
     ] = None,
+    list_devices_alias: Annotated[
+        bool,
+        typer.Option("--devices-list", "-L", help="Alias for the devices-list command"),
+    ] = False,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Show informational messages"),
@@ -241,15 +246,15 @@ def _setup(
         _network_overrides["port"] = port
     _selected_device = device
 
-
-# -- devices ---------------------------------------------------------------
-
-
-devices_app = typer.Typer(no_args_is_help=True)
-app.add_typer(devices_app, name="devices", help="Device discovery and selection")
+    if list_devices_alias and ctx.invoked_subcommand is None:
+        devices_list()
+        raise typer.Exit()
 
 
-@devices_app.command(name="list")
+# -- device discovery -------------------------------------------------------
+
+
+@app.command(name="devices-list")
 def devices_list() -> None:
     """List indexed tinySA devices on the hub."""
     devices = _call("devices", "list")
