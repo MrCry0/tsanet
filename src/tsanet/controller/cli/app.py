@@ -95,12 +95,55 @@ _UnitType = enum.Enum("_UnitType", {v: v for v in sorted(VALID_UNITS)}, type=str
 
 app = typer.Typer(no_args_is_help=True)
 _client: RpcClient | None = None
+_config_path: str | None = None
+_network_overrides: dict[str, object] = {}
+_selected_device: str | None = None
 _log = logging.getLogger("tsanet.ctl")
 
 
+def _load_config() -> ControllerConfig:
+    config = ControllerConfig.load(_config_path or DEFAULT_CONFIG_PATH)
+    for key, value in _network_overrides.items():
+        setattr(config.network, key, value)
+    NetworkConfig.model_validate(config.network.__dict__)
+    return config
+
+
 def _rpc() -> RpcClient:
-    if _client is None:
-        raise typer.Exit("not connected; check --config or connection flags")
+    global _client
+    if _client is not None:
+        return _client
+
+    config = _load_config()
+    _log.info(
+        "connecting to hub: mode=%s transport=%s address=%s",
+        config.network.mode,
+        config.network.transport,
+        config.network.address,
+    )
+
+    client = RpcClient(config)
+    try:
+        client.connect()
+        _log.info("connected to hub")
+        if _selected_device is not None:
+            _log.info("selecting device: %s", _selected_device)
+            client.call("devices", "select", device_id=_selected_device)
+    except (SecurityNotImplementedError, AuthenticationError, ConnectionClosed, RpcError) as exc:
+        _log.error("connection failed: %s", exc)
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except OSError as exc:
+        where = (
+            f"{config.network.address}:{config.network.port}"
+            if config.network.transport == "tcp"
+            else config.network.address
+        )
+        _log.error("could not reach %s: %s", where, exc)
+        typer.echo(f"error: could not reach {where}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _client = client
     return _client
 
 
@@ -183,47 +226,20 @@ def _setup(
         typer.Option("--debug", help="Show detailed debug output (implies --verbose)"),
     ] = False,
 ) -> None:
-    global _client
+    global _config_path, _network_overrides, _selected_device
     configure_logging(_resolve_log_level(verbose, debug))
 
-    config = ControllerConfig.load(config_path or DEFAULT_CONFIG_PATH)
+    _config_path = config_path
+    _network_overrides = {}
     if mode is not None:
-        config.network.mode = mode  # type: ignore[assignment]
+        _network_overrides["mode"] = mode
     if transport is not None:
-        config.network.transport = transport  # type: ignore[assignment]
+        _network_overrides["transport"] = transport
     if address is not None:
-        config.network.address = address
+        _network_overrides["address"] = address
     if port is not None:
-        config.network.port = port
-    NetworkConfig.model_validate(config.network.__dict__)
-
-    _log.info(
-        "connecting to hub: mode=%s transport=%s address=%s",
-        config.network.mode,
-        config.network.transport,
-        config.network.address,
-    )
-
-    _client = RpcClient(config)
-    try:
-        _client.connect()
-        _log.info("connected to hub")
-        if device is not None:
-            _log.info("selecting device: %s", device)
-            _client.call("devices", "select", device_id=device)
-    except (SecurityNotImplementedError, AuthenticationError, ConnectionClosed, RpcError) as exc:
-        _log.error("connection failed: %s", exc)
-        typer.echo(f"error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    except OSError as exc:
-        where = (
-            f"{config.network.address}:{config.network.port}"
-            if config.network.transport == "tcp"
-            else config.network.address
-        )
-        _log.error("could not reach %s: %s", where, exc)
-        typer.echo(f"error: could not reach {where}: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        _network_overrides["port"] = port
+    _selected_device = device
 
 
 # -- devices ---------------------------------------------------------------

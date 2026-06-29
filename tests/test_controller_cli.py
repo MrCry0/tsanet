@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 import typer
+from typer.testing import CliRunner
 
 from tsanet.controller.cli import app as cli_app
 
@@ -17,8 +18,14 @@ from tsanet.controller.cli import app as cli_app
 @pytest.fixture(autouse=True)
 def _reset_client():
     cli_app._client = None
+    cli_app._config_path = None
+    cli_app._network_overrides = {}
+    cli_app._selected_device = None
     yield
     cli_app._client = None
+    cli_app._config_path = None
+    cli_app._network_overrides = {}
+    cli_app._selected_device = None
 
 
 def test_freq_passes_through_valid_frequency():
@@ -194,6 +201,7 @@ def test_device_option_selects_device_after_connect(monkeypatch):
         port=7777,
         device="dev-2",
     )
+    cli_app._rpc()
     client = _FakeRpcClient.instances[-1]
     assert client.connected
     assert client.calls == [("devices", "select", {"device_id": "dev-2"})]
@@ -209,8 +217,21 @@ def test_no_device_option_skips_select(monkeypatch):
         port=7777,
         device=None,
     )
+    cli_app._rpc()
     client = _FakeRpcClient.instances[-1]
     assert client.calls == []
+
+
+def test_command_help_does_not_connect(monkeypatch):
+    class ExplodingRpcClient:
+        def __init__(self, config) -> None:
+            raise AssertionError("help must not instantiate RpcClient")
+
+    monkeypatch.setattr(cli_app, "RpcClient", ExplodingRpcClient)
+    result = CliRunner().invoke(cli_app.app, ["devices", "--help"])
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "list" in result.output
 
 
 class _RefusingRpcClient(_FakeRpcClient):
@@ -232,5 +253,6 @@ def test_setup_reports_unreachable_hub_cleanly(monkeypatch, capsys):
             port=17999,
             device=None,
         )
+        cli_app._rpc()
     assert exc_info.value.exit_code == 1
     assert "could not reach 127.0.0.1:17999" in capsys.readouterr().err
