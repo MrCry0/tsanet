@@ -303,9 +303,16 @@ def device_id(
 
 @device_app.command(name="battery")
 def device_battery() -> None:
-    """Print battery voltage and offset."""
-    typer.echo(f"voltage: {_call('device', 'get_battery')}")
-    typer.echo(f"offset:  {_call('device', 'get_battery_offset')}")
+    """Print battery voltage and offset, if supported by the device."""
+    for label, domain, op in (
+        ("voltage", "device", "get_battery"),
+        ("offset", "device", "get_battery_offset"),
+    ):
+        try:
+            value = _call(domain, op)
+        except typer.Exit:
+            value = "unsupported by this firmware"
+        typer.echo(f"{label}: {value}")
 
 
 @device_app.command(name="reset")
