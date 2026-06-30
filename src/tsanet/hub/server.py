@@ -13,7 +13,7 @@ import time
 from typing import Any
 
 from tsanet.common.errors import AuthenticationError, ConnectionClosed, SessionBusy
-from tsanet.device.discovery import list_serial_ports, open_serial_port
+from tsanet.device.discovery import list_serial_ports
 from tsanet.hub.config import HubConfig
 from tsanet.hub.dispatcher import Dispatcher
 from tsanet.hub.registry import DeviceRegistry, RegistryPoller
@@ -34,7 +34,7 @@ class HubServer:
 
     def __init__(self, config: HubConfig) -> None:
         self._config = config
-        self._registry = DeviceRegistry(list_serial_ports, open_serial_port)
+        self._registry = DeviceRegistry(list_serial_ports)
         self._poller = RegistryPoller(self._registry, config.poll_interval)
         self._sessions = SessionManager()
         self._subscriptions = SubscriptionManager(self._registry, self._sessions)

@@ -1,26 +1,21 @@
 """Low-level tinySA serial transport.
 
-Ported from ``go-tinysa/protocol.go``. The device echoes every command back,
-then emits the response, then a ``ch> `` prompt. String responses end with
-``\\r\\nch> ``; binary responses (``capture``) end with just ``ch> `` and no
-preceding newline. The device occasionally emits malformed output right after
-boot, so reads that do not reach the prompt are retried.
+The ``TinySA`` class is now backed by the tsapython library via
+``tsanet.device.adapter``.  The ``SerialPort`` protocol remains here
+for type-checking and test usage.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Protocol, runtime_checkable
 
-from tsanet.common.errors import CommandRejected, DeviceTimeout, ProtocolError
+from tsanet.device.adapter import TinySA  # noqa: F401 — re-export
 
 #: Shell prompt that terminates every device response.
 PROMPT = b"ch> "
 
 #: Line terminator sent after each command.
 LINE_TERMINATOR = b"\r"
-
-logger = logging.getLogger("tsanet.device")
 
 
 @runtime_checkable
@@ -34,98 +29,3 @@ class SerialPort(Protocol):
     def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes: ...
 
     def reset_input_buffer(self) -> None: ...
-
-
-class TinySA:
-    """Send commands to a tinySA over a serial port and read framed responses."""
-
-    def __init__(self, port: SerialPort, *, attempts: int = 3) -> None:
-        if attempts < 1:
-            raise ValueError("attempts must be at least 1")
-        self._port = port
-        self._attempts = attempts
-
-    def send(self, command: str) -> str:
-        """Send a command and return its text response, framing stripped."""
-        logger.debug("TX: %r", command)
-        raw = self._exchange(command, self._read_text_response)
-        body = self._strip(command, raw)
-        logger.debug("RX: %r -> %r", command, body)
-        _check_for_rejection(command, body)
-        return body
-
-    def send_binary(self, command: str, expected_len: int) -> bytes:
-        """Send a command and return ``expected_len`` bytes of binary payload.
-
-        Used for ``capture``, whose payload may contain bytes that look like
-        the prompt, so the length is known up front rather than scanned for.
-        """
-        logger.debug("TX binary: %r (expect %d bytes)", command, expected_len)
-
-        def read_binary() -> bytes:
-            self._port.read_until(b"\n")  # consume the echoed command line
-            payload = self._read_exact(expected_len)
-            prompt = self._read_exact(len(PROMPT))
-            if prompt != PROMPT:
-                raise ProtocolError(f"expected prompt after binary payload, got {prompt!r}")
-            return payload
-
-        result = self._exchange(command, read_binary)
-        logger.debug("RX binary: %r -> %d bytes", command, len(result))
-        return result
-
-    def write_only(self, command: str) -> None:
-        """Send a command without waiting for a prompt (e.g. ``reset``)."""
-        logger.debug("TX write-only: %r", command)
-        self._port.reset_input_buffer()
-        self._port.write(command.encode("ascii") + LINE_TERMINATOR)
-
-    def _exchange(self, command: str, reader):
-        last_error: DeviceTimeout | None = None
-        for _ in range(self._attempts):
-            self._port.reset_input_buffer()
-            self._port.write(command.encode("ascii") + LINE_TERMINATOR)
-            try:
-                return reader()
-            except DeviceTimeout as error:
-                last_error = error
-        assert last_error is not None
-        raise last_error
-
-    def _read_text_response(self) -> bytes:
-        data = self._port.read_until(PROMPT)
-        if not data.endswith(PROMPT):
-            raise DeviceTimeout(f"no prompt in response: {data!r}")
-        return data
-
-    def _read_exact(self, count: int) -> bytes:
-        chunks: list[bytes] = []
-        remaining = count
-        while remaining > 0:
-            chunk = self._port.read(remaining)
-            if not chunk:
-                raise DeviceTimeout(f"expected {count} bytes, got {count - remaining}")
-            chunks.append(chunk)
-            remaining -= len(chunk)
-        return b"".join(chunks)
-
-    @staticmethod
-    def _strip(command: str, raw: bytes) -> str:
-        body = raw[: -len(PROMPT)]
-        echo = command.encode("ascii")
-        if body.startswith(echo):
-            body = body[len(echo) :]
-        return body.strip(b"\r\n").decode("ascii", errors="replace")
-
-
-def _check_for_rejection(command: str, body: str) -> None:
-    """Raise if *body* looks like tinySA's usage text rather than real output.
-
-    The firmware has no error code for a bad argument (out-of-range trace
-    or marker id, unknown calc type, ...): it echoes the command's usage
-    grammar instead of performing the action. That grammar always contains
-    ``{``/``}`` placeholders, or is explicitly prefixed with ``usage:`` --
-    neither of which appears in any normal data response.
-    """
-    if body and ("{" in body or body.lstrip().lower().startswith("usage:")):
-        raise CommandRejected(f"device rejected {command!r}: {body}")
