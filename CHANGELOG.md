@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.2.2] — 2026-06-30
+
+### Added
+
+- **Lazy hub connection**: `tsanet-ctl` no longer connects to the hub in
+  the root callback. CLI options are stored and the RPC connection opens
+  only when a command first needs it, so `--help` and argument validation
+  complete before any network I/O.
+
+- **Command help on input errors**: invalid arguments (bad frequency,
+  wrong mode, unknown calc type) now print the full command reference
+  listing every parameter with its help text and required status.
+
+- **Enum validation for CLI parameters**: network mode, transport, spur
+  suppression, LNA, trace unit, and calc type now use Typer's native
+  enum validation. Invalid values show all valid choices directly in
+  the error message.
+
+- **`-L` / `--devices-list` flag alias**: listing devices is now also
+  available as a top-level global option, not just the `devices-list`
+  command.
+
+- **CONTRIBUTION.md**: contributor guide covering development setup,
+  code style, commit conventions, and the release process.
+
+### Changed
+
+- **`devices list` promoted to `devices-list` command**: the single
+  subcommand group is now a top-level command with no nesting.
+
+- **`device id --set N` changed to `device id [N]`**: the new device ID
+  is now an optional positional argument instead of a value-taking option.
+
+- **`sweep range --points N` changed to `sweep range [POINTS]`**: the
+  point count is now an optional third positional argument.
+
+- **Option naming harmonized**: `marker.get --marker/-m` and
+  `trace.get --trace/-t` now use domain-consistent option names.
+
+- **Help text unified**: frequency arguments across sweep, marker, and
+  trace commands now consistently show examples in their help text.
+
+### Fixed
+
+- **Battery command resilience**: `device battery` no longer crashes when
+  a sub-command is unsupported by the connected firmware. Each call is
+  independently guarded and reports `"unsupported by this firmware"`.
+
 ## [0.2.1] — 2026-06-26
 
 ### Fixed
