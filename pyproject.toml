@@ -15,6 +15,7 @@ dependencies = [
     "pyyaml>=6",
     "pyserial>=3.5",
     "typer>=0.12",
+    "tsapython>=3",
 ]
 
 [project.optional-dependencies]

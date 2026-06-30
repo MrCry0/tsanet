@@ -1219,6 +1219,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyserial" },
     { name = "pyyaml" },
+    { name = "tsapython" },
     { name = "typer" },
 ]
 
@@ -1249,6 +1250,7 @@ requires-dist = [
     { name = "pyside6", marker = "extra == 'all'", specifier = ">=6.5" },
     { name = "pyside6", marker = "extra == 'gui'", specifier = ">=6.5" },
     { name = "pyyaml", specifier = ">=6" },
+    { name = "tsapython", specifier = ">=3" },
     { name = "typer", specifier = ">=0.12" },
 ]
 provides-extras = ["all", "gui"]
@@ -1258,6 +1260,21 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.6" },
     { name = "twine", specifier = ">=6" },
+]
+
+[[package]]
+name = "tsapython"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f6/87/0e8beb5fac315bd57f80c5be5ebb3a857d616c99a764260abeb7cf3e5caa/tsapython-3.0.0.tar.gz", hash = "sha256:8a44370e5ce5f7041b0093756290c8fdb8ab4bf044deac8aad69b74ef8b75336", size = 29656, upload-time = "2026-06-05T05:01:08.985Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b9/c5/54eded04ed5b32a95c8ee9b74788dfcd176cb76d28654b6a4c423b917ff7/tsapython-3.0.0-py3-none-any.whl", hash = "sha256:cfa3ed276649767dc3f1f8bf7b1628e2a4b3ceb4772e8b30999e3907e02fc167", size = 37161, upload-time = "2026-06-05T05:01:07.882Z" },
 ]
 
 [[package]]

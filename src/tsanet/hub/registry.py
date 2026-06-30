@@ -1,6 +1,6 @@
 """Hub-side registry of connected tinySA devices (brief 2.4, 11.3).
 
-The registry owns the open serial connections. ``scan`` reconciles the set of
+The registry owns the open device connections. ``scan`` reconciles the set of
 registered devices with the ports currently present: new tinySA devices are
 opened and indexed, and devices whose ports have disappeared are dropped and
 closed. A :class:`RegistryPoller` re-runs ``scan`` periodically to pick up
@@ -15,12 +15,12 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from tsanet.common.errors import DeviceError
-from tsanet.device.discovery import PortLister, PortOpener, probe
+from tsanet.device.discovery import PortLister
 from tsanet.device.model import DeviceInfo
-from tsanet.device.transport import SerialPort, TinySA
+from tsanet.device.transport import TinySA
 
 logger = logging.getLogger("tsanet.hub.registry")
 
@@ -34,16 +34,15 @@ class RegisteredDevice:
     info: DeviceInfo
     transport: TinySA
     busy: bool = False
-    serial: SerialPort = field(repr=False, default=None)  # type: ignore[assignment]
 
 
 class DeviceRegistry:
-    """Tracks connected tinySA devices and their open serial connections."""
+    """Tracks connected tinySA devices and their open device connections."""
 
     def __init__(
         self,
         list_ports: PortLister,
-        open_port: PortOpener,
+        open_port: object = None,
         *,
         probe_attempts: int = 3,
     ) -> None:
@@ -59,29 +58,18 @@ class DeviceRegistry:
         with self._lock:
             known = set(self._devices)
 
-        # Probe new ports outside the lock — serial I/O takes seconds.
-        to_add: dict[str, RegisteredDevice] = {}
-        for port in present - known:
+        for port in sorted(present - known):
             device = self._probe_port(port)
             if device is not None:
-                to_add[port] = device
+                with self._lock:
+                    if port not in self._devices:
+                        self._devices[port] = device
+                        logger.info("device added: %s", port)
 
-        # Update the registry under the lock.
-        added: set[str] = set()
-        removed: set[str] = set()
         with self._lock:
-            for port, device in to_add.items():
-                if port not in self._devices:
-                    self._devices[port] = device
-                    added.add(port)
-            for port in known - present:
+            for port in sorted(known - present):
                 self._drop(port)
-                removed.add(port)
-
-        if added:
-            logger.info("devices added: %s", ", ".join(sorted(added)))
-        if removed:
-            logger.info("devices removed: %s", ", ".join(sorted(removed)))
+                logger.info("device removed: %s", port)
 
     def list(self) -> list[RegisteredDevice]:
         """Return the indexed devices, ordered by port."""
@@ -107,26 +95,48 @@ class DeviceRegistry:
                 self._drop(port)
 
     def _probe_port(self, port: str) -> RegisteredDevice | None:
-        try:
-            handle = self._open_port(port)
-        except (OSError, DeviceError):
-            return None
-        info = probe(handle, attempts=self._probe_attempts)
+        if self._open_port is not None:
+            # Test path: uses caller-provided open_port callback
+            try:
+                handle = self._open_port(port)
+            except (OSError, DeviceError):
+                return None
+            from tsanet.device import discovery as _discovery
+
+            info = _discovery.probe(handle, attempts=self._probe_attempts)
+            if info is None:
+                close_fn = getattr(handle, "close", None)
+                if callable(close_fn):
+                    close_fn()
+                return None
+            return RegisteredDevice(
+                device_id=port,
+                port=port,
+                info=info,
+                transport=TinySA(handle),
+            )
+
+        # Production path: probe and connect through tsapython adapter
+        from tsanet.device import discovery as _discovery
+
+        info = _discovery.probe(port, attempts=self._probe_attempts)
         if info is None:
-            _close(handle)
+            return None
+        try:
+            transport = TinySA(port)
+        except (OSError, DeviceError, ConnectionError):
             return None
         return RegisteredDevice(
             device_id=port,
             port=port,
             info=info,
-            transport=TinySA(handle),
-            serial=handle,
+            transport=transport,
         )
 
     def _drop(self, port: str) -> None:
         device = self._devices.pop(port, None)
         if device is not None:
-            _close(device.serial)
+            device.transport.close()
 
 
 class RegistryPoller:
@@ -158,9 +168,3 @@ class RegistryPoller:
         if self._thread is not None:
             self._thread.join()
             self._thread = None
-
-
-def _close(port: SerialPort) -> None:
-    close = getattr(port, "close", None)
-    if callable(close):
-        close()
