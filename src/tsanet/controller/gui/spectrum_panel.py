@@ -305,21 +305,27 @@ class SpectrumPanel(QWidget):
         for curve in self._curves:
             curve.setData(self._freqs[:n], level[:n])
 
-        # Update waterfall (newest sweep in column 0, time flows right)
+        # Update waterfall (newest sweep at top, time flows down)
         if not self._wf_plot.isVisible():
             return
 
         col = np.array(level[:n], dtype=np.float32)
         if self._waterfall_data is None:
-            self._waterfall_data = np.tile(col.reshape(-1, 1), (1, self._waterfall_rows))
+            self._waterfall_data = np.zeros((n, self._waterfall_rows), dtype=np.float32)
+            self._waterfall_data[:, 0] = col
         else:
-            # Shift all columns right, drop oldest (rightmost).
+            # Shift all data right, drop oldest. Fill column 0 with new sweep.
             self._waterfall_data[:, 1:] = self._waterfall_data[:, :-1]
             self._waterfall_data[:, 0] = col
-        self._wf_img.setImage(self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX))
+        # Copy so pyqtgraph detects the change.
+        self._wf_img.setImage(
+            self._waterfall_data.copy(),
+            levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX),
+        )
         self._wf_img.setRect(
             self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
         )
+        self._wf_plot.setYRange(0, self._waterfall_rows, padding=0)
 
     # -- waterfall ----------------------------------------------------------
 
