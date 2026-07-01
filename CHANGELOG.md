@@ -8,8 +8,10 @@
   layer through the dispatcher, `tsanet-ctl signal attenuate` / `sweep rbw` /
   `sweep trigger`, and the GUI's Spectrum tab.
 - **Client-side trace hold modes**: the Spectrum tab's up to 4 trace slots
-  can each independently show Live, Min hold, Max hold, or a rolling
-  Average, computed locally from the single `scanraw` stream.
+  can each independently show Live, Min hold, Max hold, Max decay,
+  Average x4/x16 (matching the device's own aver4/aver16 presets -- the
+  firmware has no arbitrary averaging count), or an approximate
+  Quasi-peak, all computed locally from the single `scanraw` stream.
 - **Marker controls in the GUI**: 2 markers with frequency entry, peak
   search, live amplitude readout, and delta between them.
 - **Reference level, scale, auto-range Y, and waterfall depth** controls in

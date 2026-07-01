@@ -1,10 +1,15 @@
-"""Tests for client-side trace hold computation (live/min/max/avg)."""
+"""Tests for client-side trace hold computation (live/min/max/maxd/avg/quasi)."""
 
 from __future__ import annotations
 
 import pytest
 
-from tsanet.controller.trace_hold import TraceHold
+from tsanet.controller.trace_hold import (
+    MAXD_DECAY_STEP,
+    QUASI_CHARGE_ALPHA,
+    QUASI_DISCHARGE_ALPHA,
+    TraceHold,
+)
 
 
 class TestLiveMode:
@@ -37,6 +42,52 @@ class TestMaxHold:
 
     def test_reset_clears_accumulated_maximum(self):
         hold = TraceHold("max")
+        hold.update([10.0])
+        hold.reset()
+        assert hold.update([1.0]) == [1.0]
+
+
+class TestMaxDecay:
+    def test_holds_at_peak_when_new_value_is_higher(self):
+        hold = TraceHold("maxd")
+        assert hold.update([5.0]) == [5.0]
+        assert hold.update([9.0]) == [9.0]
+
+    def test_decays_toward_new_value_by_fixed_step_when_lower(self):
+        hold = TraceHold("maxd")
+        hold.update([10.0])
+        assert hold.update([0.0]) == [10.0 - MAXD_DECAY_STEP]
+
+    def test_decay_never_drops_below_the_new_sample(self):
+        hold = TraceHold("maxd")
+        hold.update([10.0])
+        # Even after many frames, decay stops once it reaches the live value.
+        for _ in range(1000):
+            result = hold.update([9.99])
+        assert result == [9.99]
+
+    def test_reset_clears_accumulated_peak(self):
+        hold = TraceHold("maxd")
+        hold.update([100.0])
+        hold.reset()
+        assert hold.update([1.0]) == [1.0]
+
+
+class TestQuasiPeak:
+    def test_charges_toward_a_rising_value(self):
+        hold = TraceHold("quasi")
+        assert hold.update([0.0]) == [0.0]
+        result = hold.update([10.0])
+        assert result == pytest.approx([QUASI_CHARGE_ALPHA * 10.0])
+
+    def test_discharges_slowly_toward_a_falling_value(self):
+        hold = TraceHold("quasi")
+        hold.update([10.0])
+        result = hold.update([0.0])
+        assert result == pytest.approx([10.0 + QUASI_DISCHARGE_ALPHA * (0.0 - 10.0)])
+
+    def test_reset_clears_accumulated_state(self):
+        hold = TraceHold("quasi")
         hold.update([10.0])
         hold.reset()
         assert hold.update([1.0]) == [1.0]
@@ -78,5 +129,15 @@ class TestFrameLengthChange:
 
     def test_avg_resets_on_length_change_instead_of_crashing(self):
         hold = TraceHold("avg", window=5)
+        hold.update([1.0, 2.0, 3.0])
+        assert hold.update([9.0, 9.0]) == [9.0, 9.0]
+
+    def test_maxd_resets_on_length_change_instead_of_crashing(self):
+        hold = TraceHold("maxd")
+        hold.update([1.0, 2.0, 3.0])
+        assert hold.update([9.0, 9.0]) == [9.0, 9.0]
+
+    def test_quasi_resets_on_length_change_instead_of_crashing(self):
+        hold = TraceHold("quasi")
         hold.update([1.0, 2.0, 3.0])
         assert hold.update([9.0, 9.0]) == [9.0, 9.0]

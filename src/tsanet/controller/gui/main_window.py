@@ -184,8 +184,10 @@ class MainWindow(QMainWindow):
                 "suppression, input attenuator (auto or 0-30 dB), and resolution "
                 "bandwidth (auto or 3-600 kHz).</li>"
                 "<li><b>Traces</b> — up to 4 slots, each Live, Min hold, Max hold, "
-                "or a rolling Average, computed from the same scan stream. "
-                '"Reset holds" clears accumulated state without restarting.</li>'
+                "Max decay, Average x4/x16 (matching the device's aver4/aver16 "
+                "presets), or an approximate Quasi-peak, all computed from the "
+                'same scan stream. "Reset holds" clears accumulated state '
+                "without restarting.</li>"
                 '<li><b>Markers</b> — 2 markers, set by frequency or the "Peak" '
                 "button, with a live amplitude readout and delta between them.</li>"
                 "<li><b>Display</b> — waterfall (colormap, depth), Y auto-range, "

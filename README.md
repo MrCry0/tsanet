@@ -242,8 +242,11 @@ binary (`scanraw`) stream:
   setting), spur suppression (off/on/auto), input attenuation (auto or 0-30
   dB), and resolution bandwidth (auto or 3-600 kHz).
 - **Traces** — up to 4 independently enabled trace slots, each showing
-  Live, Min hold, Max hold, or a rolling Average computed from the same
-  scan stream; "Reset holds" clears accumulated state without restarting.
+  Live, Min hold, Max hold, Max decay, Average x4/x16 (matching the
+  device's own aver4/aver16 presets — the firmware has no arbitrary
+  averaging count), or an approximate Quasi-peak (relative comparison
+  only, not a certified CISPR detector), all computed from the same scan
+  stream; "Reset holds" clears accumulated state without restarting.
 - **Markers** — 2 markers, each set by frequency or "Peak" search, with a
   live amplitude readout and the delta between them once both are placed.
 - **Display** — waterfall on/off with selectable colormap and depth,

@@ -46,7 +46,20 @@ WATERFALL_ROWS = 300
 
 #: Up to 4 configurable trace slots, matching the device's own trace count.
 TRACE_COLORS = ["#ff4444", "#44ff44", "#4488ff", "#ffcc00"]
-TRACE_MODE_LABELS = {"Live": "live", "Min hold": "min", "Max hold": "max", "Average": "avg"}
+
+#: Label -> (TraceHold mode, window). Window only applies to "avg"; the
+#: firmware has no arbitrary averaging count, only the aver4/aver16
+#: presets (device/model.py::VALID_CALC), so those are the only two
+#: average options offered here instead of a free-form count.
+TRACE_MODE_LABELS = {
+    "Live": ("live", 1),
+    "Min hold": ("min", 1),
+    "Max hold": ("max", 1),
+    "Max decay": ("maxd", 1),
+    "Average x4": ("avg", 4),
+    "Average x16": ("avg", 16),
+    "Quasi-peak": ("quasi", 1),
+}
 
 
 class SpectrumPanel(QWidget):
@@ -246,7 +259,13 @@ class SpectrumPanel(QWidget):
             mode_cb.addItems(list(TRACE_MODE_LABELS))
             mode_cb.setToolTip(
                 "Live: raw scan.  Min/Max hold: running extremum since last "
-                "reset.  Average: rolling mean over the last N sweeps."
+                "reset.  Max decay: max hold that falls back toward the "
+                "live signal over time (approximate, not the device's own "
+                "algorithm).  Average x4/x16: rolling mean, matching the "
+                "device's aver4/aver16 presets -- the firmware has no "
+                "arbitrary averaging count.  Quasi-peak: fast-rise, "
+                "slow-fall approximation for relative comparison only, "
+                "not a certified CISPR quasi-peak detector."
             )
             row.addWidget(QLabel(f"{i + 1}:"))
             row.addWidget(mode_cb)
@@ -254,15 +273,6 @@ class SpectrumPanel(QWidget):
 
             self._trace_enable_cb.append(enable)
             self._trace_mode_cb.append(mode_cb)
-
-        avg_row = QHBoxLayout()
-        avg_row.addWidget(QLabel("Avg count:"))
-        self._avg_window = QSpinBox()
-        self._avg_window.setRange(2, 100)
-        self._avg_window.setValue(4)
-        self._avg_window.setToolTip("Number of sweeps averaged for 'Average' mode traces")
-        avg_row.addWidget(self._avg_window)
-        layout.addLayout(avg_row)
 
         reset_btn = QPushButton("Reset holds")
         reset_btn.setToolTip("Clear accumulated min/max/average state without stopping")
@@ -554,11 +564,10 @@ class SpectrumPanel(QWidget):
             self._spec_plot.removeItem(curve)
         self._curves = []
         self._trace_holds = [None] * len(TRACE_COLORS)
-        window = self._avg_window.value()
         for i, color in enumerate(TRACE_COLORS):
             if not self._trace_enable_cb[i].isChecked():
                 continue
-            mode = TRACE_MODE_LABELS[self._trace_mode_cb[i].currentText()]
+            mode, window = TRACE_MODE_LABELS[self._trace_mode_cb[i].currentText()]
             self._trace_holds[i] = TraceHold(mode, window=window)
             curve = self._spec_plot.plot([], [], pen=color, name=f"Trace {i + 1}")
             self._curves.append((i, curve))
