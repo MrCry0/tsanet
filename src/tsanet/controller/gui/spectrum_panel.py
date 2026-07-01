@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 from pyqtgraph import ImageItem, GraphicsLayoutWidget
 from pyqtgraph.colormap import get as get_colormap
 
+from tsanet.controller.gui.stats_dialog import StatsDialog
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient
 from tsanet.controller.sweep_warning import sweep_mismatch_warning
@@ -195,7 +196,21 @@ class SpectrumPanel(QWidget):
         btn_row.addWidget(self._start_btn)
         layout.addRow(btn_row)
 
+        stats_btn = QPushButton("Stats...")
+        stats_btn.setToolTip(
+            "Open the trace statistics dialog (average, median, min/max, "
+            "channel power, occupied bandwidth, PAPR, flatness, field strength)"
+        )
+        stats_btn.clicked.connect(self._show_stats)
+        layout.addRow(stats_btn)
+
         return grp
+
+    def _show_stats(self) -> None:
+        if self._rpc is None:
+            self._status.setText("Connect to a hub first")
+            return
+        StatsDialog(self._rpc, self).exec()
 
     # -- RPC helpers --------------------------------------------------------
 
