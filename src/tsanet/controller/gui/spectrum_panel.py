@@ -33,6 +33,7 @@ from tsanet.controller.gui.stats_dialog import StatsDialog
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient
 from tsanet.controller.sweep_warning import sweep_mismatch_warning
+from tsanet.controller.trace_hold import TraceHold
 
 logger = logging.getLogger("tsanet.gui.spectrum")
 
@@ -41,6 +42,10 @@ DEFAULT_Y_MIN = -120.0
 DEFAULT_Y_MAX = -20.0
 
 WATERFALL_ROWS = 300
+
+#: Up to 4 configurable trace slots, matching the device's own trace count.
+TRACE_COLORS = ["#ff4444", "#44ff44", "#4488ff", "#ffcc00"]
+TRACE_MODE_LABELS = {"Live": "live", "Min hold": "min", "Max hold": "max", "Average": "avg"}
 
 
 class SpectrumPanel(QWidget):
@@ -53,7 +58,7 @@ class SpectrumPanel(QWidget):
         self._freqs: list[int] = []
         self._waterfall_data: Optional[np.ndarray] = None
         self._waterfall_rows = WATERFALL_ROWS
-        self._trace_colors: list[str] = ["#ff4444", "#44ff44", "#4488ff"]
+        self._trace_holds: list[TraceHold | None] = [None] * len(TRACE_COLORS)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -66,6 +71,7 @@ class SpectrumPanel(QWidget):
 
         left_layout.addWidget(self._build_sweep_group())
         left_layout.addWidget(self._build_signal_group())
+        left_layout.addWidget(self._build_traces_group())
         left_layout.addWidget(self._build_display_group())
         left_layout.addStretch()
 
@@ -166,6 +172,56 @@ class SpectrumPanel(QWidget):
             self._rpc.call("signal", "disable_spur")
         elif mode == "auto":
             self._rpc.call("signal", "enable_auto_spur")
+
+    # -- traces group ---------------------------------------------------------
+
+    def _build_traces_group(self) -> QGroupBox:
+        grp = QGroupBox("Traces")
+        layout = QVBoxLayout(grp)
+
+        self._trace_enable_cb: list[QCheckBox] = []
+        self._trace_mode_cb: list[QComboBox] = []
+        for i, color in enumerate(TRACE_COLORS):
+            row = QHBoxLayout()
+            enable = QCheckBox()
+            enable.setChecked(i == 0)
+            enable.setStyleSheet(f"QCheckBox::indicator {{ background-color: {color}; }}")
+            enable.setToolTip(f"Show trace {i + 1} on the plot")
+            row.addWidget(enable)
+
+            mode_cb = QComboBox()
+            mode_cb.addItems(list(TRACE_MODE_LABELS))
+            mode_cb.setToolTip(
+                "Live: raw scan.  Min/Max hold: running extremum since last "
+                "reset.  Average: rolling mean over the last N sweeps."
+            )
+            row.addWidget(QLabel(f"{i + 1}:"))
+            row.addWidget(mode_cb)
+            layout.addLayout(row)
+
+            self._trace_enable_cb.append(enable)
+            self._trace_mode_cb.append(mode_cb)
+
+        avg_row = QHBoxLayout()
+        avg_row.addWidget(QLabel("Avg count:"))
+        self._avg_window = QSpinBox()
+        self._avg_window.setRange(2, 100)
+        self._avg_window.setValue(4)
+        self._avg_window.setToolTip("Number of sweeps averaged for 'Average' mode traces")
+        avg_row.addWidget(self._avg_window)
+        layout.addLayout(avg_row)
+
+        reset_btn = QPushButton("Reset holds")
+        reset_btn.setToolTip("Clear accumulated min/max/average state without stopping")
+        reset_btn.clicked.connect(self._reset_holds)
+        layout.addWidget(reset_btn)
+
+        return grp
+
+    def _reset_holds(self) -> None:
+        for hold in self._trace_holds:
+            if hold is not None:
+                hold.reset()
 
     # -- display group ------------------------------------------------------
 
@@ -278,13 +334,19 @@ class SpectrumPanel(QWidget):
         if self._lna_chk.isChecked():
             self._rpc.call("signal", "enable_lna")
 
-        # Set up curves (preserve existing waterfall)
-        for curve in self._curves:
+        # Set up one curve + hold per enabled trace slot (preserve waterfall).
+        for _i, curve in self._curves:
             self._spec_plot.removeItem(curve)
         self._curves = []
-        for i, color in enumerate(self._trace_colors):
+        self._trace_holds = [None] * len(TRACE_COLORS)
+        window = self._avg_window.value()
+        for i, color in enumerate(TRACE_COLORS):
+            if not self._trace_enable_cb[i].isChecked():
+                continue
+            mode = TRACE_MODE_LABELS[self._trace_mode_cb[i].currentText()]
+            self._trace_holds[i] = TraceHold(mode, window=window)
             curve = self._spec_plot.plot([], [], pen=color, name=f"Trace {i + 1}")
-            self._curves.append(curve)
+            self._curves.append((i, curve))
         self._waterfall_data = None
 
         # Subscribe to scanraw
@@ -326,10 +388,15 @@ class SpectrumPanel(QWidget):
         if not level or not self._freqs:
             return
 
-        # Update curves
+        # Update curves — each slot's hold (live/min/max/avg) is computed
+        # from the same raw scan, so a single scanraw stream drives every
+        # trace mode without extra per-trace RPC round trips.
         n = min(len(self._freqs), len(level))
-        for curve in self._curves:
-            curve.setData(self._freqs[:n], level[:n])
+        raw = level[:n]
+        for i, curve in self._curves:
+            hold = self._trace_holds[i]
+            assert hold is not None
+            curve.setData(self._freqs[:n], hold.update(raw))
 
         # Update waterfall — PySDR pattern: col-major, roll axis=1,
         # fill column 0 with newest sweep.
