@@ -12,17 +12,19 @@ import logging
 from typing import Optional
 
 import numpy as np
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -61,6 +63,67 @@ TRACE_MODE_LABELS = {
     "Quasi-peak": ("quasi", 1),
 }
 
+#: Shared margins/spacing so every settings section lines up the same way.
+_SECTION_MARGINS = (6, 4, 6, 4)
+_SECTION_SPACING = 6
+
+
+def _style_layout(layout):
+    """Apply the shared margins/spacing so every section's rows line up."""
+    layout.setContentsMargins(*_SECTION_MARGINS)
+    layout.setSpacing(_SECTION_SPACING)
+    return layout
+
+
+class _ScanrawEventBridge(QObject):
+    """Marshals scanraw events from the RPC reader thread onto the GUI thread.
+
+    RpcClient invokes the event callback directly on its background reader
+    thread (see rpc_client.py::_reader_loop). Handling the event in place
+    would touch Qt widgets from a non-GUI thread, and worse: any
+    RpcClient.call() made from inside that handler (e.g. auto-unsubscribing
+    after a single capture) can never complete, because the reader thread
+    that would deliver its response is the very thread stuck waiting for
+    it -- a guaranteed deadlock. Emitting a Qt signal from the reader
+    thread and connecting it to a slot on the GUI thread uses Qt's default
+    queued cross-thread delivery to defer the real handling to the GUI
+    thread's event loop instead.
+    """
+
+    event_ready = Signal(object)
+
+
+class _CollapsibleSection(QWidget):
+    """A titled section with one toggle button to collapse/expand it."""
+
+    def __init__(self, title: str, content: QWidget, parent=None):
+        super().__init__(parent)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._toggle_btn = QToolButton()
+        self._toggle_btn.setText(title)
+        self._toggle_btn.setCheckable(True)
+        self._toggle_btn.setChecked(True)
+        self._toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._toggle_btn.setArrowType(Qt.ArrowType.DownArrow)
+        self._toggle_btn.setToolTip(f"Collapse/expand the {title} section")
+        self._toggle_btn.setStyleSheet(
+            "QToolButton { border: none; font-weight: bold; padding: 3px; }"
+        )
+        self._toggle_btn.toggled.connect(self._on_toggled)
+        outer.addWidget(self._toggle_btn)
+
+        self._content = content
+        outer.addWidget(self._content)
+
+    def _on_toggled(self, expanded: bool) -> None:
+        self._content.setVisible(expanded)
+        self._toggle_btn.setArrowType(
+            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+        )
+
 
 class SpectrumPanel(QWidget):
     """Combined sweep-control + live-spectrum + optional waterfall widget."""
@@ -78,14 +141,18 @@ class SpectrumPanel(QWidget):
         #: Frequency in Hz for each of the 2 markers, or None if unplaced.
         self._marker_hz: list[Optional[int]] = [None, None]
 
+        # See _ScanrawEventBridge's docstring: this defers scanraw event
+        # handling from the RPC reader thread onto the GUI thread.
+        self._event_bridge = _ScanrawEventBridge()
+        self._event_bridge.event_ready.connect(self._on_scanraw_event)
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
 
-        # -- left panel: settings --------------------------------------------
-        left = QWidget()
-        left.setMaximumWidth(280)
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        # -- left panel: settings, in a vertical scroll area -----------------
+        left_content = QWidget()
+        left_layout = QVBoxLayout(left_content)
+        _style_layout(left_layout)
 
         left_layout.addWidget(self._build_sweep_group())
         left_layout.addWidget(self._build_signal_group())
@@ -93,6 +160,12 @@ class SpectrumPanel(QWidget):
         left_layout.addWidget(self._build_markers_group())
         left_layout.addWidget(self._build_display_group())
         left_layout.addStretch()
+
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left_content)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setMaximumWidth(300)
 
         # -- right panel: spectrum + waterfall -------------------------------
         right = QVBoxLayout()
@@ -128,7 +201,7 @@ class SpectrumPanel(QWidget):
         self._status.setStyleSheet("color: #888")
         right.addWidget(self._status)
 
-        layout.addWidget(left)
+        layout.addWidget(left_scroll)
         layout.addLayout(right, 1)
 
         if rpc is not None:
@@ -136,9 +209,9 @@ class SpectrumPanel(QWidget):
 
     # -- sweep group --------------------------------------------------------
 
-    def _build_sweep_group(self) -> QGroupBox:
-        grp = QGroupBox("Sweep")
-        form = QFormLayout(grp)
+    def _build_sweep_group(self) -> QWidget:
+        content = QWidget()
+        form = _style_layout(QFormLayout(content))
 
         self._sw_start = QLineEdit("100mhz")
         self._sw_start.setToolTip("Start frequency (e.g. 100mhz, 1.5ghz)")
@@ -155,18 +228,20 @@ class SpectrumPanel(QWidget):
         form.addRow("Points:", self._sw_pts)
 
         btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(0, 0, 0, 0)
+        btn_row.setSpacing(_SECTION_SPACING)
         apply_btn = QPushButton("Apply")
         apply_btn.clicked.connect(self._apply_sweep)
         btn_row.addWidget(apply_btn)
         form.addRow(btn_row)
 
-        return grp
+        return _CollapsibleSection("Sweep", content)
 
     # -- signal group -------------------------------------------------------
 
-    def _build_signal_group(self) -> QGroupBox:
-        grp = QGroupBox("Signal")
-        layout = QFormLayout(grp)
+    def _build_signal_group(self) -> QWidget:
+        content = QWidget()
+        layout = _style_layout(QFormLayout(content))
 
         self._lna_chk = QCheckBox("LNA (auto above 800 MHz)")
         self._lna_chk.setToolTip(
@@ -177,6 +252,8 @@ class SpectrumPanel(QWidget):
         layout.addRow(self._lna_chk)
 
         spur_row = QHBoxLayout()
+        spur_row.setContentsMargins(0, 0, 0, 0)
+        spur_row.setSpacing(_SECTION_SPACING)
         self._spur_cb = QComboBox()
         self._spur_cb.addItems(["off", "on", "auto"])
         self._spur_cb.setCurrentText("off")
@@ -186,6 +263,8 @@ class SpectrumPanel(QWidget):
         layout.addRow(spur_row)
 
         atten_row = QHBoxLayout()
+        atten_row.setContentsMargins(0, 0, 0, 0)
+        atten_row.setSpacing(_SECTION_SPACING)
         self._atten_cb = QComboBox()
         self._atten_cb.addItems(["auto"] + [str(v) for v in range(0, 31)])
         self._atten_cb.setToolTip("Input attenuation in dB (0-30), or automatic")
@@ -195,6 +274,8 @@ class SpectrumPanel(QWidget):
         layout.addRow(atten_row)
 
         rbw_row = QHBoxLayout()
+        rbw_row.setContentsMargins(0, 0, 0, 0)
+        rbw_row.setSpacing(_SECTION_SPACING)
         self._rbw_auto_chk = QCheckBox("Auto")
         self._rbw_auto_chk.setChecked(True)
         self._rbw_auto_chk.toggled.connect(self._on_rbw_changed)
@@ -210,7 +291,7 @@ class SpectrumPanel(QWidget):
         rbw_row.addWidget(self._rbw_spin)
         layout.addRow(rbw_row)
 
-        return grp
+        return _CollapsibleSection("Signal", content)
 
     def _set_spur(self, mode: str) -> None:
         if self._rpc is None:
@@ -241,14 +322,16 @@ class SpectrumPanel(QWidget):
 
     # -- traces group ---------------------------------------------------------
 
-    def _build_traces_group(self) -> QGroupBox:
-        grp = QGroupBox("Traces")
-        layout = QVBoxLayout(grp)
+    def _build_traces_group(self) -> QWidget:
+        content = QWidget()
+        layout = _style_layout(QVBoxLayout(content))
 
         self._trace_enable_cb: list[QCheckBox] = []
         self._trace_mode_cb: list[QComboBox] = []
         for i, color in enumerate(TRACE_COLORS):
             row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(_SECTION_SPACING)
             enable = QCheckBox()
             enable.setChecked(i == 0)
             enable.setStyleSheet(f"QCheckBox::indicator {{ background-color: {color}; }}")
@@ -279,7 +362,7 @@ class SpectrumPanel(QWidget):
         reset_btn.clicked.connect(self._reset_holds)
         layout.addWidget(reset_btn)
 
-        return grp
+        return _CollapsibleSection("Traces", content)
 
     def _reset_holds(self) -> None:
         for hold in self._trace_holds:
@@ -288,14 +371,16 @@ class SpectrumPanel(QWidget):
 
     # -- markers group --------------------------------------------------------
 
-    def _build_markers_group(self) -> QGroupBox:
-        grp = QGroupBox("Markers")
-        layout = QVBoxLayout(grp)
+    def _build_markers_group(self) -> QWidget:
+        content = QWidget()
+        layout = _style_layout(QVBoxLayout(content))
 
         self._marker_freq_edit: list[QLineEdit] = []
         self._marker_amp_label: list[QLabel] = []
         for i in range(2):
             row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(_SECTION_SPACING)
             freq_edit = QLineEdit()
             freq_edit.setPlaceholderText("frequency")
             freq_edit.setToolTip(f"Marker {i + 1} frequency (e.g. 433.92mhz); blank to remove")
@@ -319,7 +404,7 @@ class SpectrumPanel(QWidget):
         self._marker_delta_label.setStyleSheet("color: #888")
         layout.addWidget(self._marker_delta_label)
 
-        return grp
+        return _CollapsibleSection("Markers", content)
 
     def _apply_marker_freq(self, i: int) -> None:
         text = self._marker_freq_edit[i].text().strip()
@@ -371,9 +456,9 @@ class SpectrumPanel(QWidget):
 
     # -- display group ------------------------------------------------------
 
-    def _build_display_group(self) -> QGroupBox:
-        grp = QGroupBox("Display")
-        layout = QFormLayout(grp)
+    def _build_display_group(self) -> QWidget:
+        content = QWidget()
+        layout = _style_layout(QFormLayout(content))
 
         self._wf_chk = QCheckBox("Waterfall")
         self._wf_chk.toggled.connect(self._toggle_waterfall)
@@ -398,6 +483,8 @@ class SpectrumPanel(QWidget):
         layout.addRow(self._autorange_chk)
 
         ref_row = QHBoxLayout()
+        ref_row.setContentsMargins(0, 0, 0, 0)
+        ref_row.setSpacing(_SECTION_SPACING)
         self._ref_level_edit = QLineEdit()
         self._ref_level_edit.setPlaceholderText("auto")
         self._ref_level_edit.setToolTip("Reference level in dBm, or blank for automatic")
@@ -407,6 +494,8 @@ class SpectrumPanel(QWidget):
         layout.addRow(ref_row)
 
         scale_row = QHBoxLayout()
+        scale_row.setContentsMargins(0, 0, 0, 0)
+        scale_row.setSpacing(_SECTION_SPACING)
         self._scale_edit = QLineEdit()
         self._scale_edit.setPlaceholderText("auto")
         self._scale_edit.setToolTip("Scale in dB/division, or blank for automatic")
@@ -423,6 +512,8 @@ class SpectrumPanel(QWidget):
         layout.addRow("Interval:", self._ref_spin)
 
         btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(0, 0, 0, 0)
+        btn_row.setSpacing(_SECTION_SPACING)
         self._start_btn = QPushButton("Start")
         self._start_btn.setCheckable(True)
         self._start_btn.setToolTip("Start/stop continuous scanraw streaming")
@@ -443,7 +534,7 @@ class SpectrumPanel(QWidget):
         stats_btn.clicked.connect(self._show_stats)
         layout.addRow(stats_btn)
 
-        return grp
+        return _CollapsibleSection("Display", content)
 
     def _show_stats(self) -> None:
         if self._rpc is None:
@@ -573,8 +664,10 @@ class SpectrumPanel(QWidget):
             self._curves.append((i, curve))
         self._waterfall_data = None
 
-        # Subscribe to scanraw
-        self._rpc.on_event(self._on_scanraw_event)
+        # Subscribe to scanraw. Events arrive on the RPC reader thread; route
+        # them through the signal bridge so handling runs on the GUI thread
+        # (see _ScanrawEventBridge's docstring for why this matters).
+        self._rpc.on_event(self._event_bridge.event_ready.emit)
         self._rpc.call(
             "scanraw",
             "subscribe",
@@ -585,7 +678,8 @@ class SpectrumPanel(QWidget):
         )
         self._subscription_active = True
         self._status.setText(f"Streaming {s / 1e6:.1f}-{t / 1e6:.1f} MHz, {pts} pts")
-        self._start_btn.setText("Stop")
+        if not self._single_shot:
+            self._start_btn.setText("Stop")
 
     def _stop_stream(self) -> None:
         if self._rpc is not None:
