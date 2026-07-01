@@ -26,6 +26,14 @@
   is now surfaced consistently by both `tsanet-ctl` and the GUI; previously
   the CLI had its own duplicate implementation and the GUI's Spectrum tab
   had no warning at all after the Sweep tab was folded into it.
+- Pressing "Single" hung the app: the scanraw event callback ran on
+  RpcClient's reader thread, and unsubscribing from inside it deadlocked
+  waiting for a response only that same thread could deliver. Events are
+  now marshalled onto the GUI thread via a Qt signal before handling.
+- The Spectrum tab's left column had no scroll area, clipping the Markers
+  and Display groups with no way to reach them. It now scrolls, every
+  section's spacing is normalized, and each section can be collapsed to
+  its title bar and restored to reclaim screen space.
 
 ### Removed
 
