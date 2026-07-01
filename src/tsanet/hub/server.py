@@ -18,6 +18,7 @@ from tsanet.hub.config import HubConfig
 from tsanet.hub.dispatcher import Dispatcher
 from tsanet.hub.registry import DeviceRegistry, RegistryPoller
 from tsanet.hub.session import SessionManager
+from tsanet.hub.scanraw_subscription import ScanrawSubscriptionManager
 from tsanet.hub.subscriptions import SubscriptionManager
 from tsanet.protocol.messages import Request, Response, Status
 from tsanet.protocol.transport import Connection, Listener, dial, listen
@@ -38,7 +39,10 @@ class HubServer:
         self._poller = RegistryPoller(self._registry, config.poll_interval)
         self._sessions = SessionManager()
         self._subscriptions = SubscriptionManager(self._registry, self._sessions)
-        self._dispatcher = Dispatcher(self._registry, self._sessions, self._subscriptions)
+        self._scanraw = ScanrawSubscriptionManager(self._registry, self._sessions)
+        self._dispatcher = Dispatcher(
+            self._registry, self._sessions, self._subscriptions, self._scanraw
+        )
         self._listener: Listener | None = None
         self._running = False
         self._active_connections: set[Connection] = set()
@@ -88,6 +92,7 @@ class HubServer:
             self._listener.close()
         self._poller.stop()
         self._subscriptions.shutdown()
+        self._scanraw.shutdown()
         self._registry.close()
 
     # -- connection loops --------------------------------------------------

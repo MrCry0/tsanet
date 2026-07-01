@@ -31,6 +31,7 @@ from tsanet.protocol.messages import Request, Response, Status
 from tsanet.protocol.transport import Connection
 
 if TYPE_CHECKING:
+    from tsanet.hub.scanraw_subscription import ScanrawSubscriptionManager
     from tsanet.hub.subscriptions import SubscriptionManager
 
 logger = logging.getLogger("tsanet.hub.dispatcher")
@@ -44,10 +45,12 @@ class Dispatcher:
         registry: DeviceRegistry,
         sessions: SessionManager,
         subscriptions: SubscriptionManager | None = None,
+        scanraw_subscriptions: ScanrawSubscriptionManager | None = None,
     ) -> None:
         self._registry = registry
         self._sessions = sessions
         self._subscriptions = subscriptions
+        self._scanraw_subscriptions = scanraw_subscriptions
 
     # -- public API --------------------------------------------------------
 
@@ -90,6 +93,11 @@ class Dispatcher:
             if self._subscriptions is None:
                 raise DispatchError("subscriptions not configured on this hub")
             return self._handle_trace_subscription(op, args)
+
+        if domain == "scanraw" and op in ("subscribe", "unsubscribe"):
+            if self._scanraw_subscriptions is None:
+                raise DispatchError("scanraw subscriptions not configured on this hub")
+            return self._handle_scanraw_subscription(op, args)
 
         handler = _HANDLERS.get(domain)
         if handler is None:
@@ -169,6 +177,21 @@ class Dispatcher:
         if op == "unsubscribe":
             return self._subscriptions.unsubscribe()
         raise DispatchError(f"unknown trace subscription op: {op!r}")
+
+    # -- scanraw subscription (instance method — delegates to Manager) ----
+
+    def _handle_scanraw_subscription(self, op: str, args: dict):
+        assert self._scanraw_subscriptions is not None
+        if op == "subscribe":
+            return self._scanraw_subscriptions.subscribe(
+                args["start"],
+                args["stop"],
+                args["pts"],
+                args.get("interval"),
+            )
+        if op == "unsubscribe":
+            return self._scanraw_subscriptions.unsubscribe()
+        raise DispatchError(f"unknown scanraw subscription op: {op!r}")
 
 
 # -- per-domain handler functions ------------------------------------------
