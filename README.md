@@ -44,9 +44,10 @@ The suite is one Python package (`tsanet`) exposing three console scripts:
   executes commands received over the network.
 - **`tsanet-ctl`** — Command-line controller with 50+ commands across all RPC
   domains, frequency parsing, and unit-aware trace statistics.
-- **`tsanet-gui`** — Graphical controller with device listing, sweep controls,
-  trace management, screenshot capture, live spectrum graph (up to 3
-  configurable trace lines), and trace statistics.
+- **`tsanet-gui`** — Graphical controller with device listing, a unified
+  Spectrum tab (sweep controls, attenuator/RBW/trigger, up to 4 trace hold
+  modes, markers, and a live waterfall), screenshot capture, and trace
+  statistics.
 
 ## Architecture
 
@@ -82,14 +83,19 @@ Phases 1-7 are implemented and tested:
   Shared-secret token authentication, checked immediately after connection
   establishment.
 - RPC dispatcher routing all domain operations (device, sweep, marker, trace,
-  signal, menu, preset, capture, raw, devices, session).
-- Live-graph subscription push loop with frequency caching and interval pacing.
+  signal, menu, preset, capture, raw, devices, session), including attenuator,
+  resolution bandwidth, and trigger mode control.
+- Binary `scanraw` streaming subscription for the GUI's live spectrum and
+  waterfall, alongside the older text-based per-trace subscription loop
+  (frequency caching, interval pacing) still available over the RPC API.
 - Controller CLI (`tsanet-ctl`) with 50+ commands, `--device` selection option,
   frequency parsing (1.5ghz, 250k, 433.92mhz), and unit-aware trace stats.
 - Controller GUI (`tsanet-gui`) with connection dialog (including token auth),
-  device panel, sweep controls with mismatch warnings, screenshot capture
-  (fetch/save/copy), live spectrum graph (3 lines, max-speed or fixed-interval),
-  and comprehensive trace statistics dialog.
+  device panel, and a unified Spectrum tab: sweep controls with mismatch
+  warnings, attenuator/RBW/trigger, up to 4 independently configurable trace
+  hold modes (live/min/max/average) over a single fast binary stream, 2
+  markers with live amplitude and delta readouts, a PySDR-pattern waterfall,
+  screenshot capture (fetch/save/copy), and a trace statistics dialog.
 - Robust error handling: connection failures, invalid frequency arguments,
   firmware rejection of unknown commands, trace parsing errors, and sweep
   value clamping are caught and reported cleanly rather than crashing.
@@ -195,6 +201,11 @@ tsanet-ctl --address 127.0.0.1 --port 7777 sweep get
 tsanet-ctl --address 127.0.0.1 --port 7777 marker on 1
 tsanet-ctl --address 127.0.0.1 --port 7777 marker peak 1
 
+# Attenuator, RBW, trigger mode
+tsanet-ctl --address 127.0.0.1 --port 7777 signal attenuate 10
+tsanet-ctl --address 127.0.0.1 --port 7777 sweep rbw auto
+tsanet-ctl --address 127.0.0.1 --port 7777 sweep trigger single
+
 # Trace data and statistics
 tsanet-ctl --address 127.0.0.1 --port 7777 trace calc 1 maxh
 tsanet-ctl --address 127.0.0.1 --port 7777 trace save --trace 1,2 -o sweep.csv
@@ -219,14 +230,29 @@ provides:
 | Tab | Function |
 |---|---|
 | **Devices** | List attached units with [free]/[BUSY] status; click to select |
-| **Sweep** | Set start/stop/points, center, span, or CW frequency. Fields auto-refresh on tab activation and can be manually refreshed. A warning dialog appears if the device silently clamps a requested value. |
-| **Trace** | Enable/disable traces (1-4), set calculation modes (minh, maxh, aver4, etc.). Open the **Trace Stats** dialog for detailed analysis. |
+| **Spectrum** | Sweep range/points, signal controls (LNA, spur, attenuator, RBW), trace hold modes, markers, waterfall, and streaming — see below. |
 | **Capture** | Fetch the device screen (PNG), save to file, or copy to clipboard. |
-| **Live Graph** | Real-time spectrum with up to 3 configurable trace lines, max-speed or fixed-interval updates. |
+
+The **Spectrum** tab groups every scan-related control around a single fast
+binary (`scanraw`) stream:
+
+- **Sweep** — start/stop/points; a warning appears if the device silently
+  clamps a requested value (e.g. points capped at its maximum).
+- **Signal** — LNA on/off (auto-enabled above 800 MHz regardless of this
+  setting), spur suppression (off/on/auto), input attenuation (auto or 0-30
+  dB), and resolution bandwidth (auto or 3-600 kHz).
+- **Traces** — up to 4 independently enabled trace slots, each showing
+  Live, Min hold, Max hold, or a rolling Average computed from the same
+  scan stream; "Reset holds" clears accumulated state without restarting.
+- **Markers** — 2 markers, each set by frequency or "Peak" search, with a
+  live amplitude readout and the delta between them once both are placed.
+- **Display** — waterfall on/off with selectable colormap and depth,
+  Y auto-range, reference level and scale, sweep interval, Start/Stop/Single
+  capture, and the **Stats...** button below for detailed analysis.
 
 #### Trace statistics
 
-Available from the Trace tab via the "Trace Stats..." button, the statistics
+Available from the Spectrum tab via the "Stats..." button, the statistics
 dialog computes (over a selectable frequency sub-range and display unit):
 
 - **Average power** — unit-aware linear averaging (power dB, voltage dB, or linear)

@@ -1,5 +1,34 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Attenuator, RBW, and trigger mode control**: end-to-end from the device
+  layer through the dispatcher, `tsanet-ctl signal attenuate` / `sweep rbw` /
+  `sweep trigger`, and the GUI's Spectrum tab.
+- **Client-side trace hold modes**: the Spectrum tab's up to 4 trace slots
+  can each independently show Live, Min hold, Max hold, or a rolling
+  Average, computed locally from the single `scanraw` stream.
+- **Marker controls in the GUI**: 2 markers with frequency entry, peak
+  search, live amplitude readout, and delta between them.
+- **Reference level, scale, auto-range Y, and waterfall depth** controls in
+  the Spectrum tab's Display group.
+- **Single-shot capture** button alongside the existing Start/Stop.
+- **Trace statistics dialog** is reachable from the GUI again, via a
+  "Stats..." button on the Spectrum tab.
+
+### Fixed
+
+- The sweep device-clamp warning (e.g. a 900-point request capped to 450)
+  is now surfaced consistently by both `tsanet-ctl` and the GUI; previously
+  the CLI had its own duplicate implementation and the GUI's Spectrum tab
+  had no warning at all after the Sweep tab was folded into it.
+
+### Removed
+
+- `live_graph.py`, superseded by the Spectrum tab's waterfall.
+
 ## [0.3.1] — 2026-07-01
 
 ### Fixed
