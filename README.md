@@ -1,5 +1,10 @@
 # tsanet
 
+[![CI](https://github.com/MrCry0/tsanet/actions/workflows/ci.yml/badge.svg)](https://github.com/MrCry0/tsanet/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/MrCry0/tsanet)](https://github.com/MrCry0/tsanet/releases)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-GPL%20v2-blue)](LICENSE)
+
 Network control suite for **tinySA / tinySA Ultra** spectrum analyzers.
 
 `tsanet` lets one or more tinySA units, physically attached via USB to one
