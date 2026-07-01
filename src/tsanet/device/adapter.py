@@ -62,8 +62,20 @@ class TinySA:
         logger.debug("TX binary: %r (expect %d bytes)", command, expected_len)
         if command.startswith("capture"):
             raw = self._tsa.capture()
-        else:
-            raw = self._tsa.command(command)
+            result = bytes(raw)
+            if len(result) != expected_len:
+                logger.warning(
+                    "capture size mismatch: expected %d, got %d",
+                    expected_len,
+                    len(result),
+                )
+                if len(result) < expected_len:
+                    result += b"\x00" * (expected_len - len(result))
+                else:
+                    result = result[:expected_len]
+            logger.debug("RX binary: %r -> %d bytes", command, len(result))
+            return result
+        raw = self._tsa.command(command)
         result = bytes(raw)
         logger.debug("RX binary: %r -> %d bytes", command, len(result))
         return result
