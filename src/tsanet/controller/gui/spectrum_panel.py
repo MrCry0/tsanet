@@ -315,7 +315,9 @@ class SpectrumPanel(QWidget):
         else:
             self._waterfall_data = np.roll(self._waterfall_data, 1, axis=0)
             self._waterfall_data[0] = row
-        self._wf_img.setImage(self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX))
+        self._wf_img.setImage(
+            self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX), axisOrder="row-major"
+        )
         self._wf_img.setRect(
             self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
         )
