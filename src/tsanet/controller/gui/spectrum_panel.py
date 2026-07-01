@@ -82,7 +82,7 @@ class SpectrumPanel(QWidget):
         self._wf_plot.setLabel("left", "Sweeps")
         self._wf_plot.setLabel("bottom", "Frequency", units="Hz")
         self._wf_plot.hideButtons()
-        self._wf_img = ImageItem()
+        self._wf_img = ImageItem(axisOrder="col-major")
         self._wf_img.setLookupTable(get_colormap("viridis").getLookupTable())
         self._wf_plot.addItem(self._wf_img)
         self._wf_plot.hide()
@@ -305,21 +305,18 @@ class SpectrumPanel(QWidget):
         for curve in self._curves:
             curve.setData(self._freqs[:n], level[:n])
 
-        # Update waterfall (newest sweep at top)
+        # Update waterfall (newest sweep in column 0, time flows right)
         if not self._wf_plot.isVisible():
             return
 
-        row = np.array(level[:n], dtype=np.float32)
+        col = np.array(level[:n], dtype=np.float32)
         if self._waterfall_data is None:
-            self._waterfall_data = np.zeros((self._waterfall_rows, n), dtype=np.float32)
-            self._waterfall_data[0] = row
+            self._waterfall_data = np.tile(col.reshape(-1, 1), (1, self._waterfall_rows))
         else:
-            # Shift all rows down by 1, drop the oldest (bottom) row.
-            self._waterfall_data[1:] = self._waterfall_data[:-1]
-            self._waterfall_data[0] = row
-        self._wf_img.setImage(
-            self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX), axisOrder="row-major"
-        )
+            # Shift all columns right, drop oldest (rightmost).
+            self._waterfall_data[:, 1:] = self._waterfall_data[:, :-1]
+            self._waterfall_data[:, 0] = col
+        self._wf_img.setImage(self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX))
         self._wf_img.setRect(
             self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
         )
