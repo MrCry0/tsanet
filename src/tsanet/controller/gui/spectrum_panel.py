@@ -55,6 +55,7 @@ class SpectrumPanel(QWidget):
         super().__init__(parent)
         self._rpc = rpc
         self._subscription_active = False
+        self._single_shot = False
         self._freqs: list[int] = []
         self._waterfall_data: Optional[np.ndarray] = None
         self._waterfall_rows = WATERFALL_ROWS
@@ -150,6 +151,11 @@ class SpectrumPanel(QWidget):
         layout = QFormLayout(grp)
 
         self._lna_chk = QCheckBox("LNA (auto above 800 MHz)")
+        self._lna_chk.setToolTip(
+            "Force the low-noise amplifier on/off. The hub also enables it "
+            "automatically for sweeps above 800 MHz regardless of this setting."
+        )
+        self._lna_chk.toggled.connect(self._set_lna)
         layout.addRow(self._lna_chk)
 
         spur_row = QHBoxLayout()
@@ -160,6 +166,31 @@ class SpectrumPanel(QWidget):
         spur_row.addWidget(QLabel("Spur:"))
         spur_row.addWidget(self._spur_cb)
         layout.addRow(spur_row)
+
+        atten_row = QHBoxLayout()
+        self._atten_cb = QComboBox()
+        self._atten_cb.addItems(["auto"] + [str(v) for v in range(0, 31)])
+        self._atten_cb.setToolTip("Input attenuation in dB (0-30), or automatic")
+        self._atten_cb.currentTextChanged.connect(self._set_attenuation)
+        atten_row.addWidget(QLabel("Attenuator:"))
+        atten_row.addWidget(self._atten_cb)
+        layout.addRow(atten_row)
+
+        rbw_row = QHBoxLayout()
+        self._rbw_auto_chk = QCheckBox("Auto")
+        self._rbw_auto_chk.setChecked(True)
+        self._rbw_auto_chk.toggled.connect(self._on_rbw_changed)
+        self._rbw_spin = QSpinBox()
+        self._rbw_spin.setRange(3, 600)
+        self._rbw_spin.setValue(100)
+        self._rbw_spin.setSuffix(" kHz")
+        self._rbw_spin.setEnabled(False)
+        self._rbw_spin.setToolTip("Resolution bandwidth in kHz (3-600)")
+        self._rbw_spin.valueChanged.connect(self._on_rbw_changed)
+        rbw_row.addWidget(QLabel("RBW:"))
+        rbw_row.addWidget(self._rbw_auto_chk)
+        rbw_row.addWidget(self._rbw_spin)
+        layout.addRow(rbw_row)
 
         return grp
 
@@ -172,6 +203,23 @@ class SpectrumPanel(QWidget):
             self._rpc.call("signal", "disable_spur")
         elif mode == "auto":
             self._rpc.call("signal", "enable_auto_spur")
+
+    def _set_lna(self, on: bool) -> None:
+        if self._rpc is None:
+            return
+        self._rpc.call("signal", "enable_lna" if on else "disable_lna")
+
+    def _set_attenuation(self, value: str) -> None:
+        if self._rpc is None:
+            return
+        self._rpc.call("signal", "set_attenuation", value=value if value == "auto" else int(value))
+
+    def _on_rbw_changed(self, *_args) -> None:
+        self._rbw_spin.setEnabled(not self._rbw_auto_chk.isChecked())
+        if self._rpc is None:
+            return
+        value = "auto" if self._rbw_auto_chk.isChecked() else self._rbw_spin.value()
+        self._rpc.call("sweep", "set_rbw", value=value)
 
     # -- traces group ---------------------------------------------------------
 
@@ -238,6 +286,37 @@ class SpectrumPanel(QWidget):
         self._cmap_cb.currentTextChanged.connect(self._set_colormap)
         layout.addRow("Colormap:", self._cmap_cb)
 
+        self._wf_depth_spin = QSpinBox()
+        self._wf_depth_spin.setRange(20, 2000)
+        self._wf_depth_spin.setValue(WATERFALL_ROWS)
+        self._wf_depth_spin.setSuffix(" sweeps")
+        self._wf_depth_spin.setToolTip("Number of past sweeps kept in the waterfall")
+        self._wf_depth_spin.valueChanged.connect(self._set_waterfall_depth)
+        layout.addRow("WF depth:", self._wf_depth_spin)
+
+        self._autorange_chk = QCheckBox("Auto-range Y")
+        self._autorange_chk.setToolTip("Automatically scale the Y axis to the incoming data")
+        self._autorange_chk.toggled.connect(self._set_autorange)
+        layout.addRow(self._autorange_chk)
+
+        ref_row = QHBoxLayout()
+        self._ref_level_edit = QLineEdit()
+        self._ref_level_edit.setPlaceholderText("auto")
+        self._ref_level_edit.setToolTip("Reference level in dBm, or blank for automatic")
+        self._ref_level_edit.editingFinished.connect(self._apply_ref_level)
+        ref_row.addWidget(QLabel("Ref (dBm):"))
+        ref_row.addWidget(self._ref_level_edit)
+        layout.addRow(ref_row)
+
+        scale_row = QHBoxLayout()
+        self._scale_edit = QLineEdit()
+        self._scale_edit.setPlaceholderText("auto")
+        self._scale_edit.setToolTip("Scale in dB/division, or blank for automatic")
+        self._scale_edit.editingFinished.connect(self._apply_scale)
+        scale_row.addWidget(QLabel("Scale (dB/div):"))
+        scale_row.addWidget(self._scale_edit)
+        layout.addRow(scale_row)
+
         self._ref_spin = QSpinBox()
         self._ref_spin.setRange(25, 10000)
         self._ref_spin.setValue(150)
@@ -248,8 +327,14 @@ class SpectrumPanel(QWidget):
         btn_row = QHBoxLayout()
         self._start_btn = QPushButton("Start")
         self._start_btn.setCheckable(True)
+        self._start_btn.setToolTip("Start/stop continuous scanraw streaming")
         self._start_btn.toggled.connect(self._toggle_stream)
         btn_row.addWidget(self._start_btn)
+
+        single_btn = QPushButton("Single")
+        single_btn.setToolTip("Capture exactly one sweep, then stop")
+        single_btn.clicked.connect(self._single_capture)
+        btn_row.addWidget(single_btn)
         layout.addRow(btn_row)
 
         stats_btn = QPushButton("Stats...")
@@ -267,6 +352,39 @@ class SpectrumPanel(QWidget):
             self._status.setText("Connect to a hub first")
             return
         StatsDialog(self._rpc, self).exec()
+
+    def _set_autorange(self, enabled: bool) -> None:
+        if enabled:
+            self._spec_plot.enableAutoRange("y", True)
+        else:
+            self._spec_plot.enableAutoRange("y", False)
+            self._spec_plot.setYRange(DEFAULT_Y_MIN, DEFAULT_Y_MAX)
+
+    def _apply_ref_level(self) -> None:
+        if self._rpc is None:
+            return
+        text = self._ref_level_edit.text().strip()
+        if not text:
+            self._rpc.call("trace", "set_ref_level_auto")
+        else:
+            try:
+                self._rpc.call("trace", "set_ref_level", dbm=float(text))
+            except ValueError:
+                self._status.setText(f"Invalid reference level: {text!r}")
+
+    def _apply_scale(self) -> None:
+        if self._rpc is None:
+            return
+        text = self._scale_edit.text().strip()
+        try:
+            value = "auto" if not text else float(text)
+            self._rpc.call("trace", "set_scale", level=value)
+        except ValueError:
+            self._status.setText(f"Invalid scale: {text!r}")
+
+    def _set_waterfall_depth(self, rows: int) -> None:
+        self._waterfall_rows = rows
+        self._waterfall_data = None
 
     # -- RPC helpers --------------------------------------------------------
 
@@ -318,6 +436,19 @@ class SpectrumPanel(QWidget):
         else:
             self._stop_stream()
 
+    def _single_capture(self) -> None:
+        """Capture exactly one sweep, then unsubscribe.
+
+        Implemented as a one-shot flag over the normal scanraw subscription
+        rather than the device's own "trigger single" mode, since the hub
+        drives its scan loop explicitly and does not rely on firmware-side
+        triggering.
+        """
+        if self._start_btn.isChecked():
+            return
+        self._single_shot = True
+        self._start_stream()
+
     def _start_stream(self) -> None:
         if self._rpc is None:
             return
@@ -329,10 +460,6 @@ class SpectrumPanel(QWidget):
             self._status.setText("Invalid frequency")
             self._start_btn.setChecked(False)
             return
-
-        # Enable LNA if checkbox is set
-        if self._lna_chk.isChecked():
-            self._rpc.call("signal", "enable_lna")
 
         # Set up one curve + hold per enabled trace slot (preserve waterfall).
         for _i, curve in self._curves:
@@ -410,6 +537,11 @@ class SpectrumPanel(QWidget):
             self._wf_img.setRect(
                 self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
             )
+
+        if self._single_shot:
+            self._single_shot = False
+            self._stop_stream()
+            self._status.setText("Single capture complete")
 
     # -- waterfall ----------------------------------------------------------
 
