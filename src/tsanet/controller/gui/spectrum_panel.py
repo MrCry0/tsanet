@@ -84,8 +84,10 @@ class SpectrumPanel(QWidget):
         self._wf_plot.hideButtons()
         self._wf_img = ImageItem(axisOrder="col-major")
         self._wf_img.setLookupTable(get_colormap("viridis").getLookupTable())
+        self._wf_img.setLevels((DEFAULT_Y_MIN, DEFAULT_Y_MAX))
         self._wf_plot.addItem(self._wf_img)
         self._wf_plot.hide()
+        self._wf_plot.invertY(True)  # newest at top
         self._wf_plot.setXLink(self._spec_plot)
 
         self._glw.ci.layout.setRowStretchFactor(0, 3)
@@ -305,27 +307,18 @@ class SpectrumPanel(QWidget):
         for curve in self._curves:
             curve.setData(self._freqs[:n], level[:n])
 
-        # Update waterfall (newest sweep at top, time flows down)
-        if not self._wf_plot.isVisible():
-            return
-
-        col = np.array(level[:n], dtype=np.float32)
-        if self._waterfall_data is None:
-            self._waterfall_data = np.zeros((n, self._waterfall_rows), dtype=np.float32)
+        # Update waterfall — PySDR pattern: col-major, roll axis=1,
+        # fill column 0 with newest sweep.
+        if self._wf_plot.isVisible():
+            col = np.array(level[:n], dtype=np.float32)
+            if self._waterfall_data is None:
+                self._waterfall_data = -50.0 * np.ones((n, self._waterfall_rows), dtype=np.float32)
+            self._waterfall_data = np.roll(self._waterfall_data, 1, axis=1)
             self._waterfall_data[:, 0] = col
-        else:
-            # Shift all data right, drop oldest. Fill column 0 with new sweep.
-            self._waterfall_data[:, 1:] = self._waterfall_data[:, :-1]
-            self._waterfall_data[:, 0] = col
-        # Copy so pyqtgraph detects the change.
-        self._wf_img.setImage(
-            self._waterfall_data.copy(),
-            levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX),
-        )
-        self._wf_img.setRect(
-            self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
-        )
-        self._wf_plot.setYRange(0, self._waterfall_rows, padding=0)
+            self._wf_img.setImage(self._waterfall_data, autoLevels=False)
+            self._wf_img.setRect(
+                self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
+            )
 
     # -- waterfall ----------------------------------------------------------
 
