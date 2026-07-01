@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0] — 2026-07-01
+
+### Changed
+
+- **Device layer replaced with tsapython**:
+  the hand-ported go-tinysa protocol layer is replaced by the
+  [tsapython](https://github.com/LC-Linkous/tinySA_python) library
+  (PyPI: [tsapython>=3](https://pypi.org/project/tsapython/)).
+  The new `TinySA` adapter in `device/adapter.py` wraps tsapython's
+  `tinySA` class while preserving the existing `send()` /
+  `send_binary()` / `write_only()` contract so the hub command layer
+  and dispatcher require no changes.
+  The legacy transport is retained as `device/_legacy.py` for the
+  in-memory `FakeSerial` test infrastructure.
+
 ## [0.2.2] — 2026-06-30
 
 ### Added
