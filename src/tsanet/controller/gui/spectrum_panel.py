@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from pyqtgraph import PlotWidget, ImageItem
+from pyqtgraph import ImageItem, GraphicsLayoutWidget
 from pyqtgraph.colormap import get as get_colormap
 
 from tsanet.controller.parse import parse_frequency
@@ -70,19 +70,28 @@ class SpectrumPanel(QWidget):
         right = QVBoxLayout()
         right.setContentsMargins(0, 0, 0, 0)
 
-        self._plot = PlotWidget()
-        self._plot.setLabel("left", "dBm")
-        self._plot.setLabel("bottom", "Frequency", units="Hz")
-        self._plot.setYRange(DEFAULT_Y_MIN, DEFAULT_Y_MAX)
-        self._plot.showGrid(x=True, y=True, alpha=0.3)
+        self._glw = GraphicsLayoutWidget()
+        self._spec_plot = self._glw.addPlot(row=0, col=0)
+        self._spec_plot.setLabel("left", "dBm")
+        self._spec_plot.setYRange(DEFAULT_Y_MIN, DEFAULT_Y_MAX)
+        self._spec_plot.showGrid(x=True, y=True, alpha=0.3)
+        self._spec_plot.hideButtons()
         self._curves: list = []
 
-        self._waterfall_img = ImageItem()
-        self._waterfall_img.setVisible(False)
-        self._waterfall_img.setLookupTable(get_colormap("viridis").getLookupTable())
-        self._plot.addItem(self._waterfall_img)
+        self._wf_plot = self._glw.addPlot(row=1, col=0)
+        self._wf_plot.setLabel("left", "Sweeps")
+        self._wf_plot.setLabel("bottom", "Frequency", units="Hz")
+        self._wf_plot.hideButtons()
+        self._wf_img = ImageItem()
+        self._wf_img.setLookupTable(get_colormap("viridis").getLookupTable())
+        self._wf_plot.addItem(self._wf_img)
+        self._wf_plot.hide()
+        self._wf_plot.setXLink(self._spec_plot)
 
-        right.addWidget(self._plot, 3)
+        self._glw.ci.layout.setRowStretchFactor(0, 3)
+        self._glw.ci.layout.setRowStretchFactor(1, 1)
+
+        right.addWidget(self._glw, 3)
 
         # Status bar
         self._status = QLabel("Set sweep range and press Start")
@@ -243,12 +252,12 @@ class SpectrumPanel(QWidget):
         if self._lna_chk.isChecked():
             self._rpc.call("signal", "enable_lna")
 
-        # Set up curves (preserve existing waterfall image)
+        # Set up curves (preserve existing waterfall)
         for curve in self._curves:
-            self._plot.removeItem(curve)
+            self._spec_plot.removeItem(curve)
         self._curves = []
         for i, color in enumerate(self._trace_colors):
-            curve = self._plot.plot([], [], pen=color, name=f"Trace {i + 1}")
+            curve = self._spec_plot.plot([], [], pen=color, name=f"Trace {i + 1}")
             self._curves.append(curve)
         self._waterfall_data = None
 
@@ -297,30 +306,30 @@ class SpectrumPanel(QWidget):
             curve.setData(self._freqs[:n], level[:n])
 
         # Update waterfall (newest sweep at top)
-        if self._waterfall_img.isVisible():
-            row = np.array(level[:n], dtype=np.float32)
-            if self._waterfall_data is None:
-                self._waterfall_data = np.tile(row, (self._waterfall_rows, 1))
-            else:
-                self._waterfall_data = np.roll(self._waterfall_data, 1, axis=0)
-                self._waterfall_data[0] = row
-            self._waterfall_img.setImage(
-                self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX)
-            )
-            self._waterfall_img.setRect(
-                self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
-            )
+        if not self._wf_plot.isVisible():
+            return
+
+        row = np.array(level[:n], dtype=np.float32)
+        if self._waterfall_data is None:
+            self._waterfall_data = np.tile(row, (self._waterfall_rows, 1))
+        else:
+            self._waterfall_data = np.roll(self._waterfall_data, 1, axis=0)
+            self._waterfall_data[0] = row
+        self._wf_img.setImage(self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX))
+        self._wf_img.setRect(
+            self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
+        )
 
     # -- waterfall ----------------------------------------------------------
 
     def _toggle_waterfall(self, visible: bool) -> None:
-        self._waterfall_img.setVisible(visible)
+        self._wf_plot.setVisible(visible)
         if visible:
             self._waterfall_data = None
 
     def _set_colormap(self, name: str) -> None:
         cmap = get_colormap(name)
-        self._waterfall_img.setLookupTable(cmap.getLookupTable())
+        self._wf_img.setLookupTable(cmap.getLookupTable())
 
     # -- cleanup ------------------------------------------------------------
 
