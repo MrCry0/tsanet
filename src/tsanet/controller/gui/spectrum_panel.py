@@ -242,8 +242,9 @@ class SpectrumPanel(QWidget):
         if self._lna_chk.isChecked():
             self._rpc.call("signal", "enable_lna")
 
-        # Set up curves
-        self._plot.clear()
+        # Set up curves (preserve existing waterfall image)
+        for curve in self._curves:
+            self._plot.removeItem(curve)
         self._curves = []
         for i, color in enumerate(self._trace_colors):
             curve = self._plot.plot([], [], pen=color, name=f"Trace {i + 1}")
@@ -273,7 +274,10 @@ class SpectrumPanel(QWidget):
 
     # -- scanraw event handler ----------------------------------------------
 
-    def _on_scanraw_event(self, data: dict) -> None:
+    def _on_scanraw_event(self, event: object) -> None:
+        data = event.data if hasattr(event, "data") else event
+        if not isinstance(data, dict):
+            return
         freqs = data.get("frequencies")
         level = data.get("level")
 
