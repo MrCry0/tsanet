@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.1] — 2026-07-01
+
+### Fixed
+
+- **Capture payload off-by-one**: tsapython's `capture()` can return one byte
+  short of the expected RGB565 framebuffer size (307199 instead of 307200 for
+  the 480x320 Ultra display). The adapter now pads the payload to the expected
+  length, logging a warning, so screenshots work reliably.
+
 ## [0.3.0] — 2026-07-01
 
 ### Changed
