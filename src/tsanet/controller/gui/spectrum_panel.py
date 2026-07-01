@@ -30,6 +30,7 @@ from pyqtgraph import ImageItem, GraphicsLayoutWidget
 from pyqtgraph.colormap import get as get_colormap
 
 from tsanet.controller.gui.stats_dialog import StatsDialog
+from tsanet.controller.marker_lookup import nearest_amplitude
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient
 from tsanet.controller.sweep_warning import sweep_mismatch_warning
@@ -57,9 +58,12 @@ class SpectrumPanel(QWidget):
         self._subscription_active = False
         self._single_shot = False
         self._freqs: list[int] = []
+        self._last_level: list[float] = []
         self._waterfall_data: Optional[np.ndarray] = None
         self._waterfall_rows = WATERFALL_ROWS
         self._trace_holds: list[TraceHold | None] = [None] * len(TRACE_COLORS)
+        #: Frequency in Hz for each of the 2 markers, or None if unplaced.
+        self._marker_hz: list[Optional[int]] = [None, None]
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -73,6 +77,7 @@ class SpectrumPanel(QWidget):
         left_layout.addWidget(self._build_sweep_group())
         left_layout.addWidget(self._build_signal_group())
         left_layout.addWidget(self._build_traces_group())
+        left_layout.addWidget(self._build_markers_group())
         left_layout.addWidget(self._build_display_group())
         left_layout.addStretch()
 
@@ -270,6 +275,89 @@ class SpectrumPanel(QWidget):
         for hold in self._trace_holds:
             if hold is not None:
                 hold.reset()
+
+    # -- markers group --------------------------------------------------------
+
+    def _build_markers_group(self) -> QGroupBox:
+        grp = QGroupBox("Markers")
+        layout = QVBoxLayout(grp)
+
+        self._marker_freq_edit: list[QLineEdit] = []
+        self._marker_amp_label: list[QLabel] = []
+        for i in range(2):
+            row = QHBoxLayout()
+            freq_edit = QLineEdit()
+            freq_edit.setPlaceholderText("frequency")
+            freq_edit.setToolTip(f"Marker {i + 1} frequency (e.g. 433.92mhz); blank to remove")
+            freq_edit.editingFinished.connect(lambda i=i: self._apply_marker_freq(i))
+            peak_btn = QPushButton("Peak")
+            peak_btn.setToolTip(f"Move marker {i + 1} to the highest peak in the sweep")
+            peak_btn.clicked.connect(lambda _checked=False, i=i: self._marker_to_peak(i))
+            amp_label = QLabel("--")
+            amp_label.setMinimumWidth(60)
+
+            row.addWidget(QLabel(f"{i + 1}:"))
+            row.addWidget(freq_edit)
+            row.addWidget(peak_btn)
+            row.addWidget(amp_label)
+            layout.addLayout(row)
+
+            self._marker_freq_edit.append(freq_edit)
+            self._marker_amp_label.append(amp_label)
+
+        self._marker_delta_label = QLabel("")
+        self._marker_delta_label.setStyleSheet("color: #888")
+        layout.addWidget(self._marker_delta_label)
+
+        return grp
+
+    def _apply_marker_freq(self, i: int) -> None:
+        text = self._marker_freq_edit[i].text().strip()
+        if not text:
+            self._marker_hz[i] = None
+            self._marker_amp_label[i].setText("--")
+            if self._rpc is not None:
+                self._rpc.call("marker", "disable", id=i + 1)
+            return
+        try:
+            hz = parse_frequency(text)
+        except ValueError:
+            self._status.setText(f"Invalid marker frequency: {text!r}")
+            return
+        self._marker_hz[i] = hz
+        if self._rpc is not None:
+            self._rpc.call("marker", "enable", id=i + 1)
+            self._rpc.call("marker", "set_freq", id=i + 1, hz=hz)
+
+    def _marker_to_peak(self, i: int) -> None:
+        if self._rpc is None:
+            return
+        self._rpc.call("marker", "enable", id=i + 1)
+        self._rpc.call("marker", "move_to_peak", id=i + 1)
+        try:
+            raw = str(self._rpc.call("marker", "get", id=i + 1))
+            hz = int(raw.split()[1])
+        except (IndexError, ValueError):
+            return
+        self._marker_hz[i] = hz
+        self._marker_freq_edit[i].setText(str(hz))
+
+    def _update_marker_readouts(self) -> None:
+        amplitudes: list[Optional[float]] = [None, None]
+        for i, hz in enumerate(self._marker_hz):
+            if hz is None:
+                continue
+            amp = nearest_amplitude(self._freqs, self._last_level, hz)
+            amplitudes[i] = amp
+            if amp is not None:
+                self._marker_amp_label[i].setText(f"{amp:.1f} dBm")
+
+        if amplitudes[0] is not None and amplitudes[1] is not None:
+            d_hz = self._marker_hz[1] - self._marker_hz[0]
+            d_amp = amplitudes[1] - amplitudes[0]
+            self._marker_delta_label.setText(f"Δ: {_fmt_hz(d_hz)}, {d_amp:+.1f} dB")
+        else:
+            self._marker_delta_label.setText("")
 
     # -- display group ------------------------------------------------------
 
@@ -520,10 +608,13 @@ class SpectrumPanel(QWidget):
         # trace mode without extra per-trace RPC round trips.
         n = min(len(self._freqs), len(level))
         raw = level[:n]
+        self._last_level = raw
         for i, curve in self._curves:
             hold = self._trace_holds[i]
             assert hold is not None
             curve.setData(self._freqs[:n], hold.update(raw))
+
+        self._update_marker_readouts()
 
         # Update waterfall — PySDR pattern: col-major, roll axis=1,
         # fill column 0 with newest sweep.
@@ -560,3 +651,13 @@ class SpectrumPanel(QWidget):
         if self._subscription_active:
             self._stop_stream()
         super().closeEvent(event)
+
+
+def _fmt_hz(hz: int) -> str:
+    if hz >= 1_000_000_000:
+        return f"{hz / 1e9:.3f} GHz"
+    if hz >= 1_000_000:
+        return f"{hz / 1e6:.3f} MHz"
+    if hz >= 1_000:
+        return f"{hz / 1e3:.3f} kHz"
+    return f"{hz} Hz"
