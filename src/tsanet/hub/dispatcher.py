@@ -259,6 +259,10 @@ def _sweep(tx: TinySA, op: str, args: dict):
         return cmd_sweep.pause(tx)
     if op == "resume":
         return cmd_sweep.resume(tx)
+    if op == "set_rbw":
+        return cmd_sweep.set_rbw(tx, args["value"])
+    if op == "set_trigger":
+        return cmd_sweep.set_trigger(tx, args["mode"])
     raise DispatchError(f"unknown sweep op: {op!r}")
 
 
@@ -332,6 +336,8 @@ def _signal(tx: TinySA, op: str, args: dict):
         return cmd_signal.enable_lna(tx)
     if op == "disable_lna":
         return cmd_signal.disable_lna(tx)
+    if op == "set_attenuation":
+        return cmd_signal.set_attenuation(tx, args["value"])
     raise DispatchError(f"unknown signal op: {op!r}")
 
 

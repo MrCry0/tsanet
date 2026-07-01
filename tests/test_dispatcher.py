@@ -281,6 +281,26 @@ def test_sweep_pause_resume():
     assert tx.written == [b"pause\r", b"resume\r"]
 
 
+def test_sweep_set_rbw():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"rbw 100\r\nch> ", b"rbw auto\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_rbw", value=100))
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_rbw", value="auto"))
+    assert tx.written == [b"rbw 100\r", b"rbw auto\r"]
+
+
+def test_sweep_set_trigger():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"trigger single\r\nch> ", b"trigger auto\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_trigger", mode="single"))
+    _ok(_dispatch(dispatcher, conn, "sweep", "set_trigger", mode="auto"))
+    assert tx.written == [b"trigger single\r", b"trigger auto\r"]
+
+
 def test_sweep_auto_lna_for_center_above_threshold():
     dispatcher, registry, _, conn = _make_dispatcher()
     tx = FakeSerial([b"lna on\r\nch> ", b"sweep center 1785000000\r\nch> "])
@@ -466,6 +486,16 @@ def test_signal_spur():
 
     _ok(_dispatch(dispatcher, conn, "signal", "enable_spur"))
     _ok(_dispatch(dispatcher, conn, "signal", "enable_auto_spur"))
+
+
+def test_signal_set_attenuation():
+    dispatcher, registry, _, conn = _make_dispatcher()
+    tx = FakeSerial([b"attenuate 10\r\nch> ", b"attenuate auto\r\nch> "])
+    _replace_transport(registry, "/dev/ultra", TinySA(tx, attempts=1))
+
+    _ok(_dispatch(dispatcher, conn, "signal", "set_attenuation", value=10))
+    _ok(_dispatch(dispatcher, conn, "signal", "set_attenuation", value="auto"))
+    assert tx.written == [b"attenuate 10\r", b"attenuate auto\r"]
 
 
 # ======================================================================

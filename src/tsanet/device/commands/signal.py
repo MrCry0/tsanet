@@ -23,3 +23,8 @@ def enable_lna(tx: TinySA) -> str:
 
 def disable_lna(tx: TinySA) -> str:
     return tx.send("lna off")
+
+
+def set_attenuation(tx: TinySA, value: int | str) -> str:
+    """Set input attenuation to ``value`` dB (0-30), or ``"auto"``."""
+    return tx.send(f"attenuate {value}")

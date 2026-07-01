@@ -89,6 +89,22 @@ class LnaMode(str, enum.Enum):
     off = "off"
 
 
+class TriggerMode(str, enum.Enum):
+    auto = "auto"
+    normal = "normal"
+    single = "single"
+
+
+def _int_or_auto(raw: str) -> int | str:
+    """Parse "auto" or an integer; the device enforces the actual range."""
+    if raw == "auto":
+        return raw
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise typer.Exit(f"expected an integer or 'auto', got {raw!r}") from exc
+
+
 # Dynamically create Enum types from the device model constants so they
 # stay in sync and Typer can validate against them.
 _CalcType = enum.Enum("_CalcType", {v: v for v in sorted(VALID_CALC)}, type=str)  # type: ignore[call-overload]
@@ -476,6 +492,31 @@ def sweep_resume() -> None:
     typer.echo("resumed")
 
 
+@sweep_app.command(name="rbw")
+def sweep_rbw(
+    value: Annotated[
+        str,
+        typer.Argument(help="Resolution bandwidth in kHz (3-600), or 'auto'"),
+    ],
+) -> None:
+    """Set resolution bandwidth."""
+    parsed = _int_or_auto(value)
+    _call("sweep", "set_rbw", value=parsed)
+    typer.echo(f"rbw = {parsed}")
+
+
+@sweep_app.command(name="trigger")
+def sweep_trigger(
+    mode: Annotated[
+        TriggerMode,
+        typer.Argument(help="Trigger mode"),
+    ],
+) -> None:
+    """Set the sweep trigger mode (auto, normal, or single)."""
+    _call("sweep", "set_trigger", mode=mode.value)
+    typer.echo(f"trigger = {mode}")
+
+
 # -- marker ----------------------------------------------------------------
 
 
@@ -801,6 +842,19 @@ def signal_lna(
     ops = {"on": "enable_lna", "off": "disable_lna"}
     _call("signal", ops[mode])
     typer.echo(f"lna = {mode}")
+
+
+@signal_app.command(name="attenuate")
+def signal_attenuate(
+    value: Annotated[
+        str,
+        typer.Argument(help="Attenuation in dB (0-30), or 'auto'"),
+    ],
+) -> None:
+    """Set input attenuation."""
+    parsed = _int_or_auto(value)
+    _call("signal", "set_attenuation", value=parsed)
+    typer.echo(f"attenuation = {parsed}")
 
 
 # -- menu ------------------------------------------------------------------

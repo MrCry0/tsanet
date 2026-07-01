@@ -47,6 +47,16 @@ def set_time(tx: TinySA, microseconds: int) -> str:
     return tx.send(f"sweeptime {microseconds}u")
 
 
+def set_rbw(tx: TinySA, value: int | str) -> str:
+    """Set resolution bandwidth to ``value`` kHz (3-600), or ``"auto"``."""
+    return tx.send(f"rbw {value}")
+
+
+def set_trigger(tx: TinySA, mode: str) -> str:
+    """Set the sweep trigger mode: ``"auto"``, ``"normal"``, or ``"single"``."""
+    return tx.send(f"trigger {mode}")
+
+
 def pause(tx: TinySA) -> str:
     return tx.send("pause")
 
