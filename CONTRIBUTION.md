@@ -34,7 +34,7 @@ Wrapper scripts at the repo root run each program directly:
 
 ```sh
 python tsanet-hub.py --port 7777
-python tsanet-ctl.py --address 127.0.0.1 --port 7777 devices list
+python tsanet-ctl.py --address 127.0.0.1 --port 7777 devices-list
 python tsanet-gui.py
 ```
 
