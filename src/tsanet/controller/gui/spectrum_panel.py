@@ -311,9 +311,11 @@ class SpectrumPanel(QWidget):
 
         row = np.array(level[:n], dtype=np.float32)
         if self._waterfall_data is None:
-            self._waterfall_data = np.tile(row, (self._waterfall_rows, 1))
+            self._waterfall_data = np.zeros((self._waterfall_rows, n), dtype=np.float32)
+            self._waterfall_data[0] = row
         else:
-            self._waterfall_data = np.roll(self._waterfall_data, 1, axis=0)
+            # Shift all rows down by 1, drop the oldest (bottom) row.
+            self._waterfall_data[1:] = self._waterfall_data[:-1]
             self._waterfall_data[0] = row
         self._wf_img.setImage(
             self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX), axisOrder="row-major"
