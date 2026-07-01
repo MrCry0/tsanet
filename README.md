@@ -26,7 +26,8 @@ And connect to the hub's IP and port in the connection dialog.
 
 Or use the command-line controller for scripting and automation:
 ```sh
-tsanet-ctl --address 127.0.0.1 --port 7777 devices list
+tsanet-ctl --address 127.0.0.1 --port 7777 devices-list
+tsanet-ctl --address 127.0.0.1 --port 7777 -L
 tsanet-ctl --address 127.0.0.1 --port 7777 sweep center 433.92mhz
 tsanet-ctl --address 127.0.0.1 --port 7777 trace save --trace 1,2 -o sweep.csv
 ```
@@ -61,9 +62,9 @@ MessagePack payload. MessagePack is used so binary payloads (screenshots, raw
 scan dumps) ride natively as bytes. A hub serves a single controller session
 at a time.
 
-The device layer is a faithful port of the tinySA USB serial protocol: it
-replicates the device's command echo, `ch> ` prompt framing, and post-boot
-retry behaviour, and exposes the real wire command vocabulary.
+The device layer is backed by [tsapython](https://github.com/LC-Linkous/tinySA_python),
+which handles the tinySA USB serial protocol (command echo, `ch> ` prompt
+framing, retry behaviour, and the full wire command vocabulary).
 
 ## Status
 
@@ -95,8 +96,7 @@ Phases 1-7 are implemented and tested:
 
 Remaining: TLS (`tls-token` mode is accepted by config validation but the
 hub and controller refuse to start with a clear error until it is built),
-packaging (PyInstaller), reconnect and idle-timeout logic, and integration
-tests against real hardware.
+reconnect and idle-timeout logic, and integration tests against real hardware.
 
 ## Security
 
@@ -122,32 +122,35 @@ token is rejected on both ends without taking down the hub.
 
 ## Installation
 
-tsanet is not yet published to a package index, so install it from the Git
-repository. A bare install gives you `tsanet-hub` and `tsanet-ctl`. Add the
-`gui` extra for the graphical controller:
+tsanet is available on PyPI. A bare install gives you `tsanet-hub` and
+`tsanet-ctl`. Add the `gui` extra for the graphical controller:
 
 ### uv (recommended)
 
 ```sh
 # Hub or headless controller machine
-uv tool install "tsanet @ git+https://github.com/MrCry0/tsanet"
+uv tool install tsanet
 
 # GUI workstation
+uv tool install "tsanet[gui]"
+
+# From the Git repository (development version)
+uv tool install "tsanet @ git+https://github.com/MrCry0/tsanet"
 uv tool install "tsanet[gui] @ git+https://github.com/MrCry0/tsanet"
 ```
 
 ### pipx
 
 ```sh
-pipx install "tsanet[gui] @ git+https://github.com/MrCry0/tsanet"
+pipx install tsanet
+pipx install "tsanet[gui]"
 ```
 
 ### pip
 
 ```sh
-pip install "tsanet @ git+https://github.com/MrCry0/tsanet"
-# or with the GUI:
-pip install "tsanet[gui] @ git+https://github.com/MrCry0/tsanet"
+pip install tsanet
+pip install "tsanet[gui]"
 ```
 
 ## Usage
@@ -172,14 +175,15 @@ Connect to a hub and control the device:
 
 ```sh
 # List devices and check session
-tsanet-ctl --address 127.0.0.1 --port 7777 devices list
+tsanet-ctl --address 127.0.0.1 --port 7777 devices-list
+tsanet-ctl --address 127.0.0.1 --port 7777 -L
 tsanet-ctl --address 127.0.0.1 --port 7777 session status
 
 # On a hub with more than one device attached, target a specific one
 tsanet-ctl --address 127.0.0.1 --port 7777 --device /dev/ttyACM1 sweep get
 
 # Sweep control
-tsanet-ctl --address 127.0.0.1 --port 7777 sweep range 100mhz 500mhz --points 450
+tsanet-ctl --address 127.0.0.1 --port 7777 sweep range 100mhz 500mhz 450
 tsanet-ctl --address 127.0.0.1 --port 7777 sweep center 433.92mhz
 tsanet-ctl --address 127.0.0.1 --port 7777 sweep get
 # Start:      100.00 MHz
@@ -278,7 +282,7 @@ programs directly without installing the package:
 
 ```sh
 python tsanet-hub.py --port 7777
-python tsanet-ctl.py --address 127.0.0.1 --port 7777 devices list
+python tsanet-ctl.py --address 127.0.0.1 --port 7777 devices-list
 python tsanet-gui.py
 ```
 
