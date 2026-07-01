@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -30,6 +31,7 @@ from pyqtgraph.colormap import get as get_colormap
 
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient
+from tsanet.controller.sweep_warning import sweep_mismatch_warning
 
 logger = logging.getLogger("tsanet.gui.spectrum")
 
@@ -214,19 +216,26 @@ class SpectrumPanel(QWidget):
             t = parse_frequency(self._sw_stop.text())
             p = self._sw_pts.value()
             self._call("sweep", "set_start_stop", start=s, stop=t, points=p)
-            self._refresh_sweep_state()
+            self._refresh_sweep_state(requested={"start": s, "stop": t, "points": p})
         except Exception as exc:
             self._status.setText(f"Error: {exc}")
 
-    def _refresh_sweep_state(self) -> None:
+    def _refresh_sweep_state(self, requested: dict | None = None) -> None:
         try:
             raw = str(self._call("sweep", "get"))
             parts = raw.split()
             if len(parts) >= 2:
-                self._sw_start.setText(parts[0])
-                self._sw_stop.setText(parts[1])
-                if len(parts) > 2:
-                    self._sw_pts.setValue(int(parts[2]))
+                start = int(parts[0])
+                stop = int(parts[1])
+                points = int(parts[2]) if len(parts) > 2 else None
+                self._sw_start.setText(str(start))
+                self._sw_stop.setText(str(stop))
+                if points is not None:
+                    self._sw_pts.setValue(points)
+                warning = sweep_mismatch_warning(requested, start, stop, points)
+                if warning:
+                    self._status.setText(warning)
+                    QMessageBox.warning(self, "Sweep value adjusted", warning)
         except Exception:
             pass
 

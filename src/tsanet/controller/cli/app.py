@@ -32,6 +32,7 @@ from tsanet.controller.config import DEFAULT_CONFIG_PATH, ControllerConfig
 from tsanet.controller.parse import parse_frequency
 from tsanet.controller.rpc_client import RpcClient, RpcError
 from tsanet.controller.stats import compute_stats
+from tsanet.controller.sweep_warning import sweep_mismatch_warning
 from tsanet.device.model import VALID_CALC, VALID_UNITS
 
 
@@ -351,13 +352,11 @@ def _sweep_state() -> tuple[int, int, Optional[int]]:
     return start, stop, points
 
 
-def _warn_if_mismatch(label: str, requested, actual, fmt=str) -> None:
+def _warn_sweep_mismatch(requested: dict, start: int, stop: int, points: Optional[int]) -> None:
     """Warn when the device applied something other than what was requested."""
-    if requested is not None and actual is not None and requested != actual:
-        typer.echo(
-            f"warning: requested {label} {fmt(requested)} but device applied {fmt(actual)}",
-            err=True,
-        )
+    warning = sweep_mismatch_warning(requested, start, stop, points)
+    if warning:
+        typer.echo(f"warning: {warning}", err=True)
 
 
 @sweep_app.command(name="get")
@@ -383,8 +382,8 @@ def sweep_start(hz: Annotated[str, typer.Argument(help="Start frequency (e.g. 10
     """Set sweep start frequency."""
     freq = _freq(hz)
     _call("sweep", "set_start", hz=freq)
-    start, _stop, _points = _sweep_state()
-    _warn_if_mismatch("start", freq, start, _fmt_hz)
+    start, stop, points = _sweep_state()
+    _warn_sweep_mismatch({"start": freq}, start, stop, points)
     typer.echo(f"start = {_fmt_hz(start)}")
 
 
@@ -395,8 +394,8 @@ def sweep_stop(
     """Set sweep stop frequency."""
     freq = _freq(hz)
     _call("sweep", "set_stop", hz=freq)
-    _start, stop, _points = _sweep_state()
-    _warn_if_mismatch("stop", freq, stop, _fmt_hz)
+    start, stop, points = _sweep_state()
+    _warn_sweep_mismatch({"stop": freq}, start, stop, points)
     typer.echo(f"stop = {_fmt_hz(stop)}")
 
 
@@ -407,10 +406,9 @@ def sweep_center(
     """Set sweep center frequency."""
     freq = _freq(hz)
     _call("sweep", "set_center", hz=freq)
-    start, stop, _points = _sweep_state()
-    actual_center = (start + stop) // 2
-    _warn_if_mismatch("center", freq, actual_center, _fmt_hz)
-    typer.echo(f"center = {_fmt_hz(actual_center)}")
+    start, stop, points = _sweep_state()
+    _warn_sweep_mismatch({"center": freq}, start, stop, points)
+    typer.echo(f"center = {_fmt_hz((start + stop) // 2)}")
 
 
 @sweep_app.command(name="span")
@@ -418,10 +416,9 @@ def sweep_span(hz: Annotated[str, typer.Argument(help="Span (e.g. 100mhz)")]) ->
     """Set sweep span."""
     freq = _freq(hz)
     _call("sweep", "set_span", hz=freq)
-    start, stop, _points = _sweep_state()
-    actual_span = stop - start
-    _warn_if_mismatch("span", freq, actual_span, _fmt_hz)
-    typer.echo(f"span = {_fmt_hz(actual_span)}")
+    start, stop, points = _sweep_state()
+    _warn_sweep_mismatch({"span": freq}, start, stop, points)
+    typer.echo(f"span = {_fmt_hz(stop - start)}")
 
 
 @sweep_app.command(name="cw")
@@ -429,8 +426,8 @@ def sweep_cw(hz: Annotated[str, typer.Argument(help="CW frequency (e.g. 433.92mh
     """Set sweep to continuous-wave mode at a frequency."""
     freq = _freq(hz)
     _call("sweep", "set_cw", hz=freq)
-    start, _stop, _points = _sweep_state()
-    _warn_if_mismatch("cw frequency", freq, start, _fmt_hz)
+    start, stop, points = _sweep_state()
+    _warn_sweep_mismatch({"cw": freq}, start, stop, points)
     typer.echo(f"cw = {_fmt_hz(start)}")
 
 
@@ -451,9 +448,9 @@ def sweep_range(
     t = _freq(stop)
     _call("sweep", "set_start_stop", start=s, stop=t, points=points)
     actual_start, actual_stop, actual_points = _sweep_state()
-    _warn_if_mismatch("start", s, actual_start, _fmt_hz)
-    _warn_if_mismatch("stop", t, actual_stop, _fmt_hz)
-    _warn_if_mismatch("points", points, actual_points)
+    _warn_sweep_mismatch(
+        {"start": s, "stop": t, "points": points}, actual_start, actual_stop, actual_points
+    )
     extra = f" ({actual_points} pts)" if actual_points is not None else ""
     typer.echo(f"range = {_fmt_hz(actual_start)} - {_fmt_hz(actual_stop)}{extra}")
 
