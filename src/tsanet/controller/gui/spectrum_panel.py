@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 from pyqtgraph import ImageItem, GraphicsLayoutWidget
 from pyqtgraph.colormap import get as get_colormap
+from pyqtgraph.colormap import listMaps as list_colormaps
 
 from tsanet.controller.gui.stats_dialog import StatsDialog
 from tsanet.controller.marker_lookup import nearest_amplitude
@@ -62,6 +63,28 @@ TRACE_MODE_LABELS = {
     "Average x16": ("avg", 16),
     "Quasi-peak": ("quasi", 1),
 }
+
+#: Preferred waterfall colormaps, in display order. "hot" and "grayscale"
+#: are matplotlib/legacy pyqtgraph names that do not exist as local color
+#: map files in every pyqtgraph release and crash get_colormap() with a
+#: FileNotFoundError if picked -- CET-L1 (a real linear black-to-white
+#: ramp) and turbo (a rainbow/fire-toned map) are the local equivalents.
+#: This is filtered against pyqtgraph.colormap.listMaps() at import time
+#: so the dropdown only ever offers maps that actually load.
+_PREFERRED_COLORMAPS = ["viridis", "inferno", "plasma", "magma", "turbo", "CET-L1"]
+
+
+def _available_colormaps() -> list[str]:
+    """Preferred colormaps that are actually loadable, falling back to
+    whatever pyqtgraph reports as locally available if none of them are."""
+    try:
+        available = set(list_colormaps())
+    except Exception:
+        logger.warning("could not list pyqtgraph colormaps; using unfiltered defaults")
+        return list(_PREFERRED_COLORMAPS)
+    found = [name for name in _PREFERRED_COLORMAPS if name in available]
+    return found or sorted(available) or list(_PREFERRED_COLORMAPS)
+
 
 #: Shared margins/spacing so every settings section lines up the same way.
 _SECTION_MARGINS = (6, 4, 6, 4)
@@ -184,7 +207,7 @@ class SpectrumPanel(QWidget):
         self._wf_plot.setLabel("bottom", "Frequency", units="Hz")
         self._wf_plot.hideButtons()
         self._wf_img = ImageItem(axisOrder="col-major")
-        self._wf_img.setLookupTable(get_colormap("viridis").getLookupTable())
+        self._wf_img.setLookupTable(get_colormap(_available_colormaps()[0]).getLookupTable())
         self._wf_img.setLevels((DEFAULT_Y_MIN, DEFAULT_Y_MAX))
         self._wf_plot.addItem(self._wf_img)
         self._wf_plot.hide()
@@ -465,7 +488,8 @@ class SpectrumPanel(QWidget):
         layout.addRow(self._wf_chk)
 
         self._cmap_cb = QComboBox()
-        self._cmap_cb.addItems(["viridis", "inferno", "plasma", "grayscale", "hot"])
+        self._cmap_cb.addItems(_available_colormaps())
+        self._cmap_cb.setToolTip("Waterfall color map (only maps installed with pyqtgraph)")
         self._cmap_cb.currentTextChanged.connect(self._set_colormap)
         layout.addRow("Colormap:", self._cmap_cb)
 
@@ -745,7 +769,11 @@ class SpectrumPanel(QWidget):
             self._waterfall_data = None
 
     def _set_colormap(self, name: str) -> None:
-        cmap = get_colormap(name)
+        try:
+            cmap = get_colormap(name)
+        except Exception as exc:
+            self._status.setText(f"Could not load colormap {name!r}: {exc}")
+            return
         self._wf_img.setLookupTable(cmap.getLookupTable())
 
     # -- cleanup ------------------------------------------------------------
