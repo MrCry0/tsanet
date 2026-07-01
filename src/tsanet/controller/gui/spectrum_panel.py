@@ -79,6 +79,7 @@ class SpectrumPanel(QWidget):
 
         self._waterfall_img = ImageItem()
         self._waterfall_img.setVisible(False)
+        self._waterfall_img.setLookupTable(get_colormap("viridis").getLookupTable())
         self._plot.addItem(self._waterfall_img)
 
         right.addWidget(self._plot, 3)
@@ -295,15 +296,17 @@ class SpectrumPanel(QWidget):
         for curve in self._curves:
             curve.setData(self._freqs[:n], level[:n])
 
-        # Update waterfall
+        # Update waterfall (newest sweep at top)
         if self._waterfall_img.isVisible():
             row = np.array(level[:n], dtype=np.float32)
             if self._waterfall_data is None:
                 self._waterfall_data = np.tile(row, (self._waterfall_rows, 1))
             else:
-                self._waterfall_data = np.roll(self._waterfall_data, -1, axis=0)
-                self._waterfall_data[-1] = row
-            self._waterfall_img.setImage(self._waterfall_data)
+                self._waterfall_data = np.roll(self._waterfall_data, 1, axis=0)
+                self._waterfall_data[0] = row
+            self._waterfall_img.setImage(
+                self._waterfall_data, levels=(DEFAULT_Y_MIN, DEFAULT_Y_MAX)
+            )
             self._waterfall_img.setRect(
                 self._freqs[0], 0, self._freqs[-1] - self._freqs[0], self._waterfall_rows
             )
