@@ -26,8 +26,7 @@ And connect to the hub's IP and port in the connection dialog.
 
 Or use the command-line controller for scripting and automation:
 ```sh
-tsanet-ctl --address 127.0.0.1 --port 7777 devices-list
-tsanet-ctl --address 127.0.0.1 --port 7777 -L
+tsanet-ctl --address 127.0.0.1 --port 7777 devices list
 tsanet-ctl --address 127.0.0.1 --port 7777 sweep center 433.92mhz
 tsanet-ctl --address 127.0.0.1 --port 7777 trace save --trace 1,2 -o sweep.csv
 ```
@@ -181,8 +180,7 @@ Connect to a hub and control the device:
 
 ```sh
 # List devices and check session
-tsanet-ctl --address 127.0.0.1 --port 7777 devices-list
-tsanet-ctl --address 127.0.0.1 --port 7777 -L
+tsanet-ctl --address 127.0.0.1 --port 7777 devices list
 tsanet-ctl --address 127.0.0.1 --port 7777 session status
 
 # On a hub with more than one device attached, target a specific one
@@ -198,7 +196,7 @@ tsanet-ctl --address 127.0.0.1 --port 7777 sweep get
 # Points:     450
 
 # Markers
-tsanet-ctl --address 127.0.0.1 --port 7777 marker on 1
+tsanet-ctl --address 127.0.0.1 --port 7777 marker state 1 on
 tsanet-ctl --address 127.0.0.1 --port 7777 marker peak 1
 
 # Attenuator, RBW, trigger mode
@@ -311,7 +309,7 @@ programs directly without installing the package:
 
 ```sh
 python tsanet-hub.py --port 7777
-python tsanet-ctl.py --address 127.0.0.1 --port 7777 devices-list
+python tsanet-ctl.py --address 127.0.0.1 --port 7777 devices list
 python tsanet-gui.py
 ```
 

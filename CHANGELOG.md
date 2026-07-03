@@ -35,9 +35,37 @@
   section's spacing is normalized, and each section can be collapsed to
   its title bar and restored to reclaim screen space.
 
+### Changed
+
+- **CLI commands harmonized to a single "value as argument" idiom**, matching
+  `signal lna on|off` / `signal spur on|off|auto` / `sweep trigger
+  auto|normal|single`, which previously coexisted with a second idiom
+  (separate on/off subcommands) for no documented reason:
+  - `devices-list` (plus the global `-L`/`--devices-list` flag) is now
+    `devices list`, matching every other domain's `noun subcommand` shape.
+  - `marker on <id>` / `marker off <id>` -> `marker state <id> on|off`.
+  - `marker track <id>` / `marker track-off <id>` -> `marker track <id> on|off`.
+  - `marker delta <id> <ref>` / `marker delta-off <id>` -> `marker delta <id> <ref|off>`.
+  - `trace on <id>` / `trace off <id>` -> `trace view <id> on|off`.
+  - `trace ref <dbm>` / `trace ref-auto` -> `trace ref <dbm|auto>` (a
+    negative value needs `--` first: `trace ref -- -30`, a pre-existing
+    Click parsing quirk with leading `-`, not new to this change).
+  - No RPC/dispatcher changes -- every collapsed command already routed to
+    a distinct existing op.
+
+### Fixed
+
+- Several CLI commands (`signal lna`, `signal spur`, `sweep trigger`,
+  `trace calc`, `trace unit`, `trace stats`) echoed a Typer enum argument
+  directly in an f-string, printing its Python repr (e.g. `lna =
+  LnaMode.on`) instead of the plain value (`lna = on`). Found while adding
+  tests for the harmonized commands above, which use the same pattern.
+
 ### Removed
 
 - `live_graph.py`, superseded by the Spectrum tab's waterfall.
+- `trace calc-off`: `device/model.py`'s `VALID_CALC` already includes
+  `"off"`, so `trace calc <id> off` sends the identical wire command.
 
 ## [0.3.1] — 2026-07-01
 

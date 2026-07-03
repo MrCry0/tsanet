@@ -13,13 +13,13 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 CONFIG="$SCRIPT_DIR/controller.yaml"
 CTL="tsanet-ctl --config $CONFIG"
 
-$CTL sweep range 2400mhz 2490mhz --points 180
+$CTL sweep range 2400mhz 2490mhz 180
 
-$CTL trace on 1
+$CTL trace view 1 on
 $CTL trace calc 1 minh
 
-$CTL trace on 2
+$CTL trace view 2 on
 $CTL trace calc 2 maxh
 
-$CTL trace on 3
+$CTL trace view 3 on
 $CTL trace calc 3 aver4

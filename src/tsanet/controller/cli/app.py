@@ -95,6 +95,11 @@ class TriggerMode(str, enum.Enum):
     single = "single"
 
 
+class OnOff(str, enum.Enum):
+    on = "on"
+    off = "off"
+
+
 def _int_or_auto(raw: str) -> int | str:
     """Parse "auto" or an integer; the device enforces the actual range."""
     if raw == "auto":
@@ -103,6 +108,26 @@ def _int_or_auto(raw: str) -> int | str:
         return int(raw)
     except ValueError as exc:
         raise typer.Exit(f"expected an integer or 'auto', got {raw!r}") from exc
+
+
+def _int_or_off(raw: str) -> int | str:
+    """Parse "off" or an integer marker id."""
+    if raw == "off":
+        return raw
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise typer.Exit(f"expected an integer or 'off', got {raw!r}") from exc
+
+
+def _float_or_auto(raw: str) -> float | str:
+    """Parse "auto" or a float; the device enforces the actual range."""
+    if raw == "auto":
+        return raw
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise typer.Exit(f"expected a number or 'auto', got {raw!r}") from exc
 
 
 # Dynamically create Enum types from the device model constants so they
@@ -204,9 +229,8 @@ def _resolve_log_level(verbose: bool, debug: bool) -> int:
     return logging.WARNING
 
 
-@app.callback(invoke_without_command=True)
+@app.callback()
 def _setup(
-    ctx: typer.Context,
     config_path: Annotated[
         Optional[str],
         typer.Option("--config", "-c", help="Path to controller config YAML"),
@@ -235,10 +259,6 @@ def _setup(
             help="Device ID to select on a hub with more than one device attached",
         ),
     ] = None,
-    list_devices_alias: Annotated[
-        bool,
-        typer.Option("--devices-list", "-L", help="Alias for the devices-list command"),
-    ] = False,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Show informational messages"),
@@ -263,15 +283,15 @@ def _setup(
         _network_overrides["port"] = port
     _selected_device = device
 
-    if list_devices_alias and ctx.invoked_subcommand is None:
-        devices_list()
-        raise typer.Exit()
-
 
 # -- device discovery -------------------------------------------------------
 
 
-@app.command(name="devices-list")
+devices_app = typer.Typer(no_args_is_help=True)
+app.add_typer(devices_app, name="devices", help="Device discovery")
+
+
+@devices_app.command(name="list")
 def devices_list() -> None:
     """List indexed tinySA devices on the hub."""
     devices = _call("devices", "list")
@@ -514,7 +534,7 @@ def sweep_trigger(
 ) -> None:
     """Set the sweep trigger mode (auto, normal, or single)."""
     _call("sweep", "set_trigger", mode=mode.value)
-    typer.echo(f"trigger = {mode}")
+    typer.echo(f"trigger = {mode.value}")
 
 
 # -- marker ----------------------------------------------------------------
@@ -538,22 +558,14 @@ def marker_get(
         typer.echo(_call("marker", "get_all"))
 
 
-@marker_app.command(name="on")
-def marker_on(
+@marker_app.command(name="state")
+def marker_state(
     marker_id: Annotated[int, typer.Argument(help="Marker ID")],
+    state: Annotated[OnOff, typer.Argument(help="Enable or disable the marker")],
 ) -> None:
-    """Enable a marker."""
-    _call("marker", "enable", id=marker_id)
-    typer.echo(f"marker {marker_id} enabled")
-
-
-@marker_app.command(name="off")
-def marker_off(
-    marker_id: Annotated[int, typer.Argument(help="Marker ID")],
-) -> None:
-    """Disable a marker."""
-    _call("marker", "disable", id=marker_id)
-    typer.echo(f"marker {marker_id} disabled")
+    """Enable or disable a marker."""
+    _call("marker", "enable" if state == OnOff.on else "disable", id=marker_id)
+    typer.echo(f"marker {marker_id} {state.value}")
 
 
 @marker_app.command(name="freq")
@@ -588,38 +600,26 @@ def marker_peak(
 @marker_app.command(name="delta")
 def marker_delta(
     marker_id: Annotated[int, typer.Argument(help="Marker ID")],
-    ref_id: Annotated[int, typer.Argument(help="Reference marker ID")],
+    ref: Annotated[str, typer.Argument(help="Reference marker ID, or 'off'")],
 ) -> None:
-    """Set marker as delta from a reference marker."""
-    _call("marker", "enable_delta", id=marker_id, ref_id=ref_id)
-    typer.echo(f"marker {marker_id} delta from {ref_id}")
-
-
-@marker_app.command(name="delta-off")
-def marker_delta_off(
-    marker_id: Annotated[int, typer.Argument(help="Marker ID")],
-) -> None:
-    """Disable delta mode on a marker."""
-    _call("marker", "disable_delta", id=marker_id)
-    typer.echo(f"marker {marker_id} delta off")
+    """Set marker as delta from a reference marker, or disable delta mode."""
+    parsed = _int_or_off(ref)
+    if parsed == "off":
+        _call("marker", "disable_delta", id=marker_id)
+        typer.echo(f"marker {marker_id} delta off")
+    else:
+        _call("marker", "enable_delta", id=marker_id, ref_id=parsed)
+        typer.echo(f"marker {marker_id} delta from {parsed}")
 
 
 @marker_app.command(name="track")
 def marker_track(
     marker_id: Annotated[int, typer.Argument(help="Marker ID")],
+    state: Annotated[OnOff, typer.Argument(help="Enable or disable peak tracking")],
 ) -> None:
-    """Enable peak tracking on a marker."""
-    _call("marker", "enable_tracking", id=marker_id)
-    typer.echo(f"marker {marker_id} tracking on")
-
-
-@marker_app.command(name="track-off")
-def marker_track_off(
-    marker_id: Annotated[int, typer.Argument(help="Marker ID")],
-) -> None:
-    """Disable peak tracking on a marker."""
-    _call("marker", "disable_tracking", id=marker_id)
-    typer.echo(f"marker {marker_id} tracking off")
+    """Enable or disable peak tracking on a marker."""
+    _call("marker", "enable_tracking" if state == OnOff.on else "disable_tracking", id=marker_id)
+    typer.echo(f"marker {marker_id} tracking {state.value}")
 
 
 # -- trace -----------------------------------------------------------------
@@ -643,22 +643,14 @@ def trace_get(
         typer.echo(_call("trace", "get_all"))
 
 
-@trace_app.command(name="on")
-def trace_on(
+@trace_app.command(name="view")
+def trace_view(
     trace_id: Annotated[int, typer.Argument(help="Trace ID")],
+    state: Annotated[OnOff, typer.Argument(help="Show or hide the trace")],
 ) -> None:
-    """Enable a trace."""
-    _call("trace", "enable", id=trace_id)
-    typer.echo(f"trace {trace_id} enabled")
-
-
-@trace_app.command(name="off")
-def trace_off(
-    trace_id: Annotated[int, typer.Argument(help="Trace ID")],
-) -> None:
-    """Disable a trace."""
-    _call("trace", "disable", id=trace_id)
-    typer.echo(f"trace {trace_id} disabled")
+    """Enable or disable a trace."""
+    _call("trace", "enable" if state == OnOff.on else "disable", id=trace_id)
+    typer.echo(f"trace {trace_id} {state.value}")
 
 
 @trace_app.command(name="calc")
@@ -666,21 +658,12 @@ def trace_calc(
     trace_id: Annotated[int, typer.Argument(help="Trace ID")],
     calc_type: Annotated[
         _CalcType,
-        typer.Argument(help="Calculation type"),
+        typer.Argument(help="Calculation type, or 'off' to disable"),
     ],
 ) -> None:
-    """Enable a calculation mode (minh, maxh, maxd, aver4, aver16, aver, quasi)."""
-    _call("trace", "enable_calc", id=trace_id, calc=calc_type)
-    typer.echo(f"trace {trace_id} calc = {calc_type}")
-
-
-@trace_app.command(name="calc-off")
-def trace_calc_off(
-    trace_id: Annotated[int, typer.Argument(help="Trace ID")],
-) -> None:
-    """Disable calculation on a trace."""
-    _call("trace", "disable_calc", id=trace_id)
-    typer.echo(f"trace {trace_id} calc off")
+    """Set a trace's calculation mode (minh, maxh, maxd, aver4, aver16, aver, quasi, off)."""
+    _call("trace", "enable_calc", id=trace_id, calc=calc_type.value)
+    typer.echo(f"trace {trace_id} calc = {calc_type.value}")
 
 
 @trace_app.command(name="unit")
@@ -691,24 +674,28 @@ def trace_unit(
     ],
 ) -> None:
     """Set the trace display unit."""
-    _call("trace", "set_unit", unit=unit)
-    typer.echo(f"unit = {unit}")
+    _call("trace", "set_unit", unit=unit.value)
+    typer.echo(f"unit = {unit.value}")
 
 
 @trace_app.command(name="ref")
 def trace_ref(
-    dbm: Annotated[float, typer.Argument(help="Reference level in dBm")],
+    value: Annotated[
+        str,
+        typer.Argument(
+            help="Reference level in dBm, or 'auto'. "
+            "For a negative value, put -- first: trace ref -- -30"
+        ),
+    ],
 ) -> None:
-    """Set the trace reference level."""
-    _call("trace", "set_ref_level", dbm=dbm)
-    typer.echo(f"ref level = {dbm} dBm")
-
-
-@trace_app.command(name="ref-auto")
-def trace_ref_auto() -> None:
-    """Set reference level to automatic."""
-    _call("trace", "set_ref_level_auto")
-    typer.echo("ref level = auto")
+    """Set the trace reference level, or set it to automatic."""
+    parsed = _float_or_auto(value)
+    if parsed == "auto":
+        _call("trace", "set_ref_level_auto")
+        typer.echo("ref level = auto")
+    else:
+        _call("trace", "set_ref_level", dbm=parsed)
+        typer.echo(f"ref level = {parsed} dBm")
 
 
 @trace_app.command(name="scale")
@@ -785,6 +772,7 @@ def trace_stats(
     ] = None,
 ) -> None:
     """Compute statistics over a frequency sub-range."""
+    unit = getattr(unit, "value", unit)
     start_hz = _freq(start)
     stop_hz = _freq(stop)
 
@@ -828,7 +816,7 @@ def signal_spur(
     """Control spur suppression (on, off, or auto)."""
     ops = {"on": "enable_spur", "off": "disable_spur", "auto": "enable_auto_spur"}
     _call("signal", ops[mode])
-    typer.echo(f"spur = {mode}")
+    typer.echo(f"spur = {mode.value}")
 
 
 @signal_app.command(name="lna")
@@ -841,7 +829,7 @@ def signal_lna(
     """Control LNA (on or off)."""
     ops = {"on": "enable_lna", "off": "disable_lna"}
     _call("signal", ops[mode])
-    typer.echo(f"lna = {mode}")
+    typer.echo(f"lna = {mode.value}")
 
 
 @signal_app.command(name="attenuate")

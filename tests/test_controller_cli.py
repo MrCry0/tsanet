@@ -15,10 +15,6 @@ from typer.testing import CliRunner
 from tsanet.controller.cli import app as cli_app
 
 
-class _Ctx:
-    invoked_subcommand = None
-
-
 @pytest.fixture(autouse=True)
 def _reset_client():
     cli_app._client = None
@@ -198,7 +194,6 @@ def test_device_option_selects_device_after_connect(monkeypatch):
     """
     monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
     cli_app._setup(
-        _Ctx(),
         config_path=None,
         mode="dial",
         transport="tcp",
@@ -215,7 +210,6 @@ def test_device_option_selects_device_after_connect(monkeypatch):
 def test_no_device_option_skips_select(monkeypatch):
     monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
     cli_app._setup(
-        _Ctx(),
         config_path=None,
         mode="dial",
         transport="tcp",
@@ -234,17 +228,28 @@ def test_command_help_does_not_connect(monkeypatch):
             raise AssertionError("help must not instantiate RpcClient")
 
     monkeypatch.setattr(cli_app, "RpcClient", ExplodingRpcClient)
-    result = CliRunner().invoke(cli_app.app, ["devices-list", "--help"])
+    result = CliRunner().invoke(cli_app.app, ["devices", "list", "--help"])
     assert result.exit_code == 0
     assert "Usage:" in result.output
     assert "List indexed tinySA devices" in result.output
 
 
-def test_devices_list_alias_lists_devices(monkeypatch):
+def test_devices_list_shows_devices(monkeypatch):
     monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
     result = CliRunner().invoke(
         cli_app.app,
-        ["--mode", "dial", "--transport", "tcp", "--address", "127.0.0.1", "--port", "7777", "-L"],
+        [
+            "--mode",
+            "dial",
+            "--transport",
+            "tcp",
+            "--address",
+            "127.0.0.1",
+            "--port",
+            "7777",
+            "devices",
+            "list",
+        ],
     )
     assert result.exit_code == 0
     assert "no devices found" in result.output
@@ -263,7 +268,6 @@ def test_setup_reports_unreachable_hub_cleanly(monkeypatch, capsys):
     monkeypatch.setattr(cli_app, "RpcClient", _RefusingRpcClient)
     with pytest.raises(typer.Exit) as exc_info:
         cli_app._setup(
-            _Ctx(),
             config_path=None,
             mode="dial",
             transport="tcp",
@@ -274,3 +278,133 @@ def test_setup_reports_unreachable_hub_cleanly(monkeypatch, capsys):
         cli_app._rpc()
     assert exc_info.value.exit_code == 1
     assert "could not reach 127.0.0.1:17999" in capsys.readouterr().err
+
+
+# -- harmonized value-as-argument commands ----------------------------------
+#
+# marker on/off, marker track/track-off, marker delta/delta-off,
+# trace on/off, trace calc-off, and trace ref/ref-auto used to be separate
+# subcommands per state; they are now single commands taking the state as
+# an argument value, matching signal lna/spur's existing shape. Invoked via
+# CliRunner (not calling the functions directly) so Click's real enum
+# conversion runs -- calling with a bare Python str would skip it and mask
+# bugs like the enum-formatted-as-repr issue these tests also guard against.
+
+
+def _invoke(monkeypatch, args):
+    monkeypatch.setattr(cli_app, "RpcClient", _FakeRpcClient)
+    result = CliRunner().invoke(
+        cli_app.app,
+        ["--mode", "dial", "--transport", "tcp", "--address", "127.0.0.1", "--port", "7777", *args],
+    )
+    return result
+
+
+def test_marker_state_on_dispatches_enable(monkeypatch):
+    result = _invoke(monkeypatch, ["marker", "state", "1", "on"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("marker", "enable", {"id": 1})]
+    assert result.output == "marker 1 on\n"
+
+
+def test_marker_state_off_dispatches_disable(monkeypatch):
+    result = _invoke(monkeypatch, ["marker", "state", "1", "off"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("marker", "disable", {"id": 1})]
+
+
+def test_marker_state_rejects_invalid_value(monkeypatch):
+    result = _invoke(monkeypatch, ["marker", "state", "1", "bogus"])
+    assert result.exit_code != 0
+    assert _FakeRpcClient.instances == []
+
+
+def test_marker_track_on_dispatches_enable_tracking(monkeypatch):
+    result = _invoke(monkeypatch, ["marker", "track", "2", "on"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("marker", "enable_tracking", {"id": 2})]
+
+
+def test_marker_track_off_dispatches_disable_tracking(monkeypatch):
+    result = _invoke(monkeypatch, ["marker", "track", "2", "off"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("marker", "disable_tracking", {"id": 2})]
+
+
+def test_marker_delta_with_ref_id_dispatches_enable_delta(monkeypatch):
+    result = _invoke(monkeypatch, ["marker", "delta", "1", "2"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [
+        ("marker", "enable_delta", {"id": 1, "ref_id": 2})
+    ]
+
+
+def test_marker_delta_off_dispatches_disable_delta(monkeypatch):
+    result = _invoke(monkeypatch, ["marker", "delta", "1", "off"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("marker", "disable_delta", {"id": 1})]
+
+
+def test_trace_view_on_dispatches_enable(monkeypatch):
+    result = _invoke(monkeypatch, ["trace", "view", "1", "on"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("trace", "enable", {"id": 1})]
+
+
+def test_trace_view_off_dispatches_disable(monkeypatch):
+    result = _invoke(monkeypatch, ["trace", "view", "1", "off"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("trace", "disable", {"id": 1})]
+
+
+def test_trace_calc_off_uses_enable_calc_with_off_value(monkeypatch):
+    """calc-off was removed: 'trace calc <id> off' sends the identical wire
+    command (calc {id} off) through the existing enable_calc op."""
+    result = _invoke(monkeypatch, ["trace", "calc", "1", "off"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [
+        ("trace", "enable_calc", {"id": 1, "calc": "off"})
+    ]
+
+
+def test_trace_calc_formats_value_not_repr(monkeypatch):
+    """Regression: echoing a Typer enum argument directly (f'{x}') prints
+    its Python repr (e.g. '_CalcType.maxh') instead of the plain value."""
+    result = _invoke(monkeypatch, ["trace", "calc", "1", "maxh"])
+    assert result.exit_code == 0, result.output
+    assert "maxh" in result.output
+    assert "_CalcType" not in result.output
+
+
+def test_trace_ref_auto_dispatches_set_ref_level_auto(monkeypatch):
+    result = _invoke(monkeypatch, ["trace", "ref", "auto"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("trace", "set_ref_level_auto", {})]
+
+
+def test_trace_ref_numeric_dispatches_set_ref_level(monkeypatch):
+    result = _invoke(monkeypatch, ["trace", "ref", "30"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("trace", "set_ref_level", {"dbm": 30.0})]
+
+
+def test_trace_ref_negative_value_needs_dash_dash(monkeypatch):
+    """Click parses a bare leading '-' as an option; '--' is the documented
+    escape hatch, called out in the command's own help text."""
+    blocked = _invoke(monkeypatch, ["trace", "ref", "-30"])
+    assert blocked.exit_code != 0
+    result = _invoke(monkeypatch, ["trace", "ref", "--", "-30"])
+    assert result.exit_code == 0, result.output
+    assert _FakeRpcClient.instances[-1].calls == [("trace", "set_ref_level", {"dbm": -30.0})]
+
+
+def test_signal_lna_and_spur_format_value_not_repr(monkeypatch):
+    lna = _invoke(monkeypatch, ["signal", "lna", "off"])
+    assert lna.output == "lna = off\n"
+    spur = _invoke(monkeypatch, ["signal", "spur", "auto"])
+    assert spur.output == "spur = auto\n"
+
+
+def test_sweep_trigger_formats_value_not_repr(monkeypatch):
+    result = _invoke(monkeypatch, ["sweep", "trigger", "single"])
+    assert result.output == "trigger = single\n"
