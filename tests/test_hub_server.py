@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import socket
+import struct
 import threading
 
 import pytest
 
 from tsanet.common.config import NetworkConfig, SecurityConfig
-from tsanet.common.errors import AuthenticationError
+from tsanet.common.errors import AuthenticationError, ConnectionClosed
 from tsanet.hub.config import HubConfig
 from tsanet.hub.server import HubServer
 from tsanet.protocol.messages import Request, Response, Status
@@ -83,6 +85,80 @@ class TestHubServer:
 
             conn1.close()
             conn2.close()
+        finally:
+            server.stop()
+
+    def test_second_connection_reset_before_rejection_does_not_crash_hub(self):
+        """Smoke test: a peer that vanishes abruptly (TCP RST, not a clean
+        close) right as it's rejected for a busy session must not affect
+        the hub's ability to keep serving the connection that holds it.
+        See test_serve_survives_send_failure_while_rejecting_busy_session
+        below for a deterministic test of the specific code path this
+        exercises non-deterministically (timing between the RST and the
+        hub's own rejection send() is a race)."""
+        server, port = _start_server()
+        try:
+            conn1 = _connect(port)
+            conn1.send(Request(id=1, domain="session", op="status"))
+            assert conn1.recv().status == Status.OK
+
+            conn2 = _connect(port)
+            # Force a real RST instead of a clean close, so the hub's
+            # rejection send() may hit a dead socket like the bug report.
+            conn2._sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            conn2._sock.close()
+
+            # The hub must still be alive and serving conn1 normally.
+            conn1.send(Request(id=2, domain="session", op="status"))
+            resp = conn1.recv()
+            assert resp.status == Status.OK
+
+            conn1.close()
+        finally:
+            server.stop()
+
+    def test_serve_survives_send_failure_while_rejecting_busy_session(self):
+        """Regression, pinned down precisely: _serve()'s except-SessionBusy
+        handler calls connection.send() to notify the rejected peer -- if
+        that peer is already gone, send() now raises ConnectionClosed (see
+        protocol/transport.py). Before the fix, this exception was not
+        caught by that handler's own except clause and escaped _serve()
+        entirely uncaught (invisible to tsanet's own logging, and skipping
+        the session-cleanup finally block), instead of being treated as
+        the unremarkable "peer disconnected" event it is.
+        """
+        server, port = _start_server()
+        try:
+            conn1 = _connect(port)
+            conn1.send(Request(id=1, domain="session", op="status"))
+            assert conn1.recv().status == Status.OK
+
+            class _DeadPeerConnection:
+                def __init__(self):
+                    self.closed = False
+
+                @property
+                def _sock(self):
+                    return self
+
+                def getpeername(self):
+                    return ("127.0.0.1", 0)
+
+                def send(self, message):
+                    raise ConnectionClosed("peer is gone")
+
+                def close(self):
+                    self.closed = True
+
+            fake_connection = _DeadPeerConnection()
+
+            server._serve(fake_connection)  # must not raise
+
+            assert fake_connection.closed
+            # The hub must still be alive and serving the real session.
+            conn1.send(Request(id=2, domain="session", op="status"))
+            assert conn1.recv().status == Status.OK
+            conn1.close()
         finally:
             server.stop()
 

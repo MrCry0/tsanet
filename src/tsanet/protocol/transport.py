@@ -51,8 +51,17 @@ class Connection:
 
     def send(self, message: Message) -> None:
         frame = encode(message)
-        with self._send_lock:
-            self._sock.sendall(frame)
+        try:
+            with self._send_lock:
+                self._sock.sendall(frame)
+        except OSError as exc:
+            # A dead peer surfaces here as BrokenPipeError/ConnectionResetError
+            # (an abrupt disconnect, e.g. the process was killed or the
+            # network dropped) rather than a clean EOF. Normalize it to the
+            # same signal recv() uses so callers only need to handle one
+            # "the peer is gone" exception, not track every OSError subtype
+            # the OS might raise for a dead socket.
+            raise ConnectionClosed(f"connection lost while sending: {exc}") from exc
 
     def recv(self) -> Message:
         length = decode_length(self._recv_exact(HEADER_SIZE))
@@ -62,7 +71,13 @@ class Connection:
         chunks: list[bytes] = []
         remaining = count
         while remaining > 0:
-            chunk = self._sock.recv(remaining)
+            try:
+                chunk = self._sock.recv(remaining)
+            except OSError as exc:
+                # Same normalization as send(): an abrupt disconnect (TCP
+                # RST) raises ConnectionResetError/OSError directly instead
+                # of recv() returning b"" the way a clean FIN does.
+                raise ConnectionClosed(f"connection lost: {exc}") from exc
             if not chunk:
                 raise ConnectionClosed("peer closed the connection")
             chunks.append(chunk)
