@@ -314,6 +314,23 @@ class SpectrumPanel(QWidget):
         rbw_row.addWidget(self._rbw_spin)
         layout.addRow(rbw_row)
 
+        sweeptime_row = QHBoxLayout()
+        sweeptime_row.setContentsMargins(0, 0, 0, 0)
+        sweeptime_row.setSpacing(_SECTION_SPACING)
+        self._sweeptime_spin = QSpinBox()
+        self._sweeptime_spin.setRange(0, 1_000_000)
+        self._sweeptime_spin.setSingleStep(100)
+        self._sweeptime_spin.setValue(0)
+        self._sweeptime_spin.setSuffix(" us")
+        self._sweeptime_spin.setToolTip(
+            "Sweep time in microseconds. Lower is faster; the device clamps "
+            "to its achievable minimum. 0 requests the device default."
+        )
+        self._sweeptime_spin.editingFinished.connect(self._set_sweep_time)
+        sweeptime_row.addWidget(QLabel("Sweep time:"))
+        sweeptime_row.addWidget(self._sweeptime_spin)
+        layout.addRow(sweeptime_row)
+
         return _CollapsibleSection("Signal", content)
 
     def _set_spur(self, mode: str) -> None:
@@ -342,6 +359,11 @@ class SpectrumPanel(QWidget):
             return
         value = "auto" if self._rbw_auto_chk.isChecked() else self._rbw_spin.value()
         self._rpc.call("sweep", "set_rbw", value=value)
+
+    def _set_sweep_time(self) -> None:
+        if self._rpc is None:
+            return
+        self._rpc.call("sweep", "set_time", us=self._sweeptime_spin.value())
 
     # -- traces group ---------------------------------------------------------
 

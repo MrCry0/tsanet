@@ -238,7 +238,9 @@ binary (`scanraw`) stream:
   clamps a requested value (e.g. points capped at its maximum).
 - **Signal** — LNA on/off (auto-enabled above 800 MHz regardless of this
   setting), spur suppression (off/on/auto), input attenuation (auto or 0-30
-  dB), and resolution bandwidth (auto or 3-600 kHz).
+  dB), resolution bandwidth (auto or 3-600 kHz), and sweep time in
+  microseconds (0 requests the device default; lower is faster, down to
+  whatever the device can actually achieve).
 - **Traces** — up to 4 independently enabled trace slots, each showing
   Live, Min hold, Max hold, Max decay, Average x4/x16 (matching the
   device's own aver4/aver16 presets — the firmware has no arbitrary

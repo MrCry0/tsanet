@@ -7,6 +7,8 @@
 - **Attenuator, RBW, and trigger mode control**: end-to-end from the device
   layer through the dispatcher, `tsanet-ctl signal attenuate` / `sweep rbw` /
   `sweep trigger`, and the GUI's Spectrum tab.
+- **Sweep time control in the GUI's Signal group**: `sweeptime` was already
+  wired end-to-end (`tsanet-ctl sweep time <us>`) but had no GUI presence.
 - **Client-side trace hold modes**: the Spectrum tab's up to 4 trace slots
   can each independently show Live, Min hold, Max hold, Max decay,
   Average x4/x16 (matching the device's own aver4/aver16 presets -- the
