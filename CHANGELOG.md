@@ -1,9 +1,16 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0] — 2026-07-03
 
 ### Added
 
+- **Unified Spectrum tab**: the old separate Sweep, Trace, and Live Graph
+  tabs are replaced by a single tab combining sweep controls, signal
+  controls, trace display, markers, and a live waterfall, backed by a new
+  binary `scanraw` streaming subscription (`hub/scanraw_subscription.py`)
+  for higher resolution and lower latency than the old per-trace text
+  polling. The waterfall follows the PySDR real-time spectrogram pattern
+  (`np.roll` + column fill, col-major `ImageItem`, colormap LUT).
 - **Attenuator, RBW, and trigger mode control**: end-to-end from the device
   layer through the dispatcher, `tsanet-ctl signal attenuate` / `sweep rbw` /
   `sweep trigger`, and the GUI's Spectrum tab.
@@ -29,21 +36,6 @@
 - **Trace statistics dialog** is reachable from the GUI again, via a
   "Stats..." button on the Spectrum tab.
 
-### Fixed
-
-- The sweep device-clamp warning (e.g. a 900-point request capped to 450)
-  is now surfaced consistently by both `tsanet-ctl` and the GUI; previously
-  the CLI had its own duplicate implementation and the GUI's Spectrum tab
-  had no warning at all after the Sweep tab was folded into it.
-- Pressing "Single" hung the app: the scanraw event callback ran on
-  RpcClient's reader thread, and unsubscribing from inside it deadlocked
-  waiting for a response only that same thread could deliver. Events are
-  now marshalled onto the GUI thread via a Qt signal before handling.
-- The Spectrum tab's left column had no scroll area, clipping the Markers
-  and Display groups with no way to reach them. It now scrolls, every
-  section's spacing is normalized, and each section can be collapsed to
-  its title bar and restored to reclaim screen space.
-
 ### Changed
 
 - **CLI commands harmonized to a single "value as argument" idiom**, matching
@@ -60,15 +52,37 @@
     negative value needs `--` first: `trace ref -- -30`, a pre-existing
     Click parsing quirk with leading `-`, not new to this change).
   - No RPC/dispatcher changes -- every collapsed command already routed to
-    a distinct existing op.
+    a distinct existing op. This is a breaking change to `tsanet-ctl`
+    invocations with no compatibility shim (see the version bump to 1.0.0).
 
 ### Fixed
 
+- The sweep device-clamp warning (e.g. a 900-point request capped to 450)
+  is now surfaced consistently by both `tsanet-ctl` and the GUI; previously
+  the CLI had its own duplicate implementation and the GUI's Spectrum tab
+  had no warning at all after the Sweep tab was folded into it.
+- Pressing "Single" hung the app: the scanraw event callback ran on
+  RpcClient's reader thread, and unsubscribing from inside it deadlocked
+  waiting for a response only that same thread could deliver. Events are
+  now marshalled onto the GUI thread via a Qt signal before handling.
+- The Spectrum tab's left column had no scroll area, clipping the Markers
+  and Display groups with no way to reach them. It now scrolls, every
+  section's spacing is normalized, and each section can be collapsed to
+  its title bar and restored to reclaim screen space.
+- The waterfall's Colormap dropdown offered "hot" and "grayscale", neither
+  of which is a real local colormap in the installed pyqtgraph version,
+  crashing with `FileNotFoundError` when picked. The dropdown is now built
+  from `pyqtgraph.colormap.listMaps()` so it only ever offers maps that
+  actually load (adding `magma`, `turbo`, and `CET-L1` -- a genuine linear
+  black-to-white ramp -- as real equivalents).
+- The "Average" trace mode had an arbitrary sweep-count field the firmware
+  does not support (`device/model.py`'s `VALID_CALC` only has fixed
+  `aver4`/`aver16` presets); replaced with those two presets, plus Max
+  Decay and an approximate Quasi-peak, rounding out the real calc set.
 - Several CLI commands (`signal lna`, `signal spur`, `sweep trigger`,
   `trace calc`, `trace unit`, `trace stats`) echoed a Typer enum argument
   directly in an f-string, printing its Python repr (e.g. `lna =
-  LnaMode.on`) instead of the plain value (`lna = on`). Found while adding
-  tests for the harmonized commands above, which use the same pattern.
+  LnaMode.on`) instead of the plain value (`lna = on`).
 
 ### Removed
 

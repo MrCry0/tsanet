@@ -68,7 +68,11 @@ framing, retry behaviour, and the full wire command vocabulary).
 
 ## Status
 
-Phases 1-7 are implemented and tested:
+**1.0.0 changes `tsanet-ctl`'s command shapes** (see [CHANGELOG.md](CHANGELOG.md)
+for the full before/after list) — scripts using the old `devices-list`,
+`marker on/off`, `marker track-off`, `marker delta-off`, `trace on/off`,
+`trace calc-off`, or `trace ref-auto` commands need updating; there is no
+compatibility shim.
 
 - Device serial protocol: command framing, echo and prompt handling, retries,
   text and binary responses. Full verified tinySA wire command vocabulary.
