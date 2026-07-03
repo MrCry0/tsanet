@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from tsapython import tinySA as _tsapython
 
@@ -79,6 +80,70 @@ class TinySA:
         result = bytes(raw)
         logger.debug("RX binary: %r -> %d bytes", command, len(result))
         return result
+
+    def read_scanraw(self, start: int, stop: int, pts: int, timeout: float = 2.0) -> bytes:
+        """Fetch one scanraw frame via a tight-poll read, bypassing tsapython.
+
+        tsapython's own ``scan_raw()`` -> ``get_binary_return()`` busy-polls
+        with ``time.sleep(0.01)`` whenever the serial buffer is momentarily
+        empty -- a real, avoidable latency tax on top of the actual transfer
+        time. This reads directly against the underlying pyserial handle
+        (``tsapython.tinySA.ser``, a plain public attribute) with
+        OS-blocking reads instead, replicating tsapython's own framing
+        exactly: the response is ``'{' + 3*pts data bytes + '}'``, and (to
+        match ``get_binary_return``'s contract, which callers already
+        decode against) this returns ``'{' + data`` with the trailing
+        ``'}'`` dropped.
+
+        Reaches around a third-party dependency's internals, so any
+        surprise -- a missing ``.ser``, a framing mismatch, a timeout --
+        falls back to the normal ``scan_raw()`` call rather than raising.
+        The fast path is opt-in (see hub/config.py's ``scanraw_fast_read``)
+        and self-healing: never worse than the existing behavior.
+        """
+        if self._legacy is not None:
+            raise NotImplementedError(
+                "read_scanraw requires a tsapython-backed connection, not the legacy transport"
+            )
+
+        tsa = self._tsa
+        ser = getattr(tsa, "ser", None)
+        if ser is None:
+            logger.debug("read_scanraw: tsapython has no '.ser' attribute; using scan_raw")
+            return bytes(tsa.scan_raw(start, stop, pts))
+
+        try:
+            ser.reset_input_buffer()
+            ser.reset_output_buffer()
+            ser.write(f"scanraw {start} {stop} {pts} 1\r\n".encode("ascii"))
+
+            frame_len = 1 + 3 * pts + 1  # '{' + 3*pts data bytes + '}'
+            buf = bytearray()
+            deadline = time.monotonic() + timeout
+
+            # Skip the echoed command line up to the frame's opening '{'.
+            while b"{" not in buf:
+                chunk = ser.read(1)
+                if chunk:
+                    buf += chunk
+                elif time.monotonic() > deadline:
+                    raise TimeoutError("read_scanraw: no frame start '{' before timeout")
+
+            start_idx = buf.index(b"{")
+            need = frame_len - (len(buf) - start_idx)
+            while need > 0:
+                chunk = ser.read(need)
+                if chunk:
+                    buf += chunk
+                    need -= len(chunk)
+                elif time.monotonic() > deadline:
+                    raise TimeoutError("read_scanraw: short frame before timeout")
+
+            frame = bytes(buf[start_idx : start_idx + frame_len])
+            return frame[:-1]  # '{' + data, matching get_binary_return's contract
+        except Exception:
+            logger.debug("read_scanraw fast path failed; falling back to scan_raw", exc_info=True)
+            return bytes(tsa.scan_raw(start, stop, pts))
 
     def write_only(self, command: str) -> None:
         """Send a command without waiting for a response."""

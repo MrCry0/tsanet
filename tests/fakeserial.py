@@ -38,6 +38,9 @@ class FakeSerial:
     def reset_input_buffer(self) -> None:
         self._buffer = b""
 
+    def reset_output_buffer(self) -> None:
+        pass
+
 
 class FakeDevicePort:
     """A serial port that answers every command with a fixed response body.
