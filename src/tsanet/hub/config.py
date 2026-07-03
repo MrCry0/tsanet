@@ -19,6 +19,10 @@ class HubConfig(BaseModel):
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     #: Seconds between device hotplug rescans.
     poll_interval: float = 2.0
+    #: Opt-in tight-poll scanraw read (device.adapter.TinySA.read_scanraw)
+    #: instead of tsapython's own scan_raw(). Not benchmarked against real
+    #: hardware yet, so it defaults off; see CHANGELOG for details.
+    scanraw_fast_read: bool = False
 
     @classmethod
     def load(cls, path: str | Path | None = DEFAULT_CONFIG_PATH) -> HubConfig:

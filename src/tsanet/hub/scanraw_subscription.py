@@ -30,9 +30,15 @@ ULTRA_REF_LEVEL = 168.0
 class ScanrawSubscriptionManager:
     """Owns the active scanraw subscription, at most one per session."""
 
-    def __init__(self, registry: DeviceRegistry, sessions: SessionManager) -> None:
+    def __init__(
+        self,
+        registry: DeviceRegistry,
+        sessions: SessionManager,
+        fast_read: bool = False,
+    ) -> None:
         self._registry = registry
         self._sessions = sessions
+        self._fast_read = fast_read
         self._lock = threading.Lock()
         self._active: ScanrawSubscription | None = None
         self._next_id = 0
@@ -61,6 +67,7 @@ class ScanrawSubscriptionManager:
                 pts,
                 interval,
                 sub_id,
+                fast_read=self._fast_read,
             )
             sub.start()
             self._active = sub
@@ -107,6 +114,7 @@ class ScanrawSubscription:
         pts: int,
         interval: float | None,
         subscription_id: int,
+        fast_read: bool = False,
     ) -> None:
         self._tx = tx
         self._connection = connection
@@ -115,6 +123,7 @@ class ScanrawSubscription:
         self._pts = pts
         self._interval = interval
         self._subscription_id = subscription_id
+        self._fast_read = fast_read
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -152,7 +161,10 @@ class ScanrawSubscription:
                 cycle_start = time.monotonic()
 
                 try:
-                    raw = tsa.scan_raw(self._start, self._stop, self._pts)
+                    if self._fast_read:
+                        raw = self._tx.read_scanraw(self._start, self._stop, self._pts)
+                    else:
+                        raw = tsa.scan_raw(self._start, self._stop, self._pts)
                     # raw = b'{' + 3*pts bytes, skip '{'
                     data = raw[1:]
                     values = struct.unpack("<" + "xH" * self._pts, data)

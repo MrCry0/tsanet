@@ -16,6 +16,7 @@ def test_hub_defaults():
     assert config.network.transport == TCP
     assert config.network.port == 7777
     assert config.security.mode == "none"
+    assert config.scanraw_fast_read is False
 
 
 def test_network_endpoint_tcp():
@@ -57,3 +58,10 @@ def test_hub_load_from_yaml(tmp_path):
 def test_hub_load_missing_file_uses_defaults(tmp_path):
     config = HubConfig.load(tmp_path / "absent.yaml")
     assert config.network.port == 7777
+
+
+def test_hub_scanraw_fast_read_from_yaml(tmp_path):
+    path = tmp_path / "hub.yaml"
+    path.write_text("scanraw_fast_read: true\n")
+    config = HubConfig.load(path)
+    assert config.scanraw_fast_read is True

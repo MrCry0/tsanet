@@ -9,6 +9,13 @@
   `sweep trigger`, and the GUI's Spectrum tab.
 - **Sweep time control in the GUI's Signal group**: `sweeptime` was already
   wired end-to-end (`tsanet-ctl sweep time <us>`) but had no GUI presence.
+- **Experimental opt-in fast scanraw read** (`scanraw_fast_read` in
+  `hub.yaml`, or `tsanet-hub run --scanraw-fast-read`): a tight-poll read
+  of scanraw frames that bypasses a real, avoidable ~10ms-per-gap latency
+  tax in tsapython's own `scan_raw()`, falling back automatically to the
+  existing behavior on any failure. Defaults off pending benchmarking on
+  real hardware -- none is available in this environment to confirm the
+  win or rule out surprises.
 - **Client-side trace hold modes**: the Spectrum tab's up to 4 trace slots
   can each independently show Live, Min hold, Max hold, Max decay,
   Average x4/x16 (matching the device's own aver4/aver16 presets -- the

@@ -39,7 +39,9 @@ class HubServer:
         self._poller = RegistryPoller(self._registry, config.poll_interval)
         self._sessions = SessionManager()
         self._subscriptions = SubscriptionManager(self._registry, self._sessions)
-        self._scanraw = ScanrawSubscriptionManager(self._registry, self._sessions)
+        self._scanraw = ScanrawSubscriptionManager(
+            self._registry, self._sessions, fast_read=config.scanraw_fast_read
+        )
         self._dispatcher = Dispatcher(
             self._registry, self._sessions, self._subscriptions, self._scanraw
         )

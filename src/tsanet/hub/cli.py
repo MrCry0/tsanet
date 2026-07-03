@@ -79,6 +79,14 @@ def run(
         Optional[float],
         typer.Option("--poll-interval", help="Device hotplug scan interval (seconds)"),
     ] = None,
+    scanraw_fast_read: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--scanraw-fast-read/--no-scanraw-fast-read",
+            help="Experimental: tight-poll scanraw reads instead of tsapython's "
+            "own scan_raw(). Not yet benchmarked against real hardware.",
+        ),
+    ] = None,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Show informational messages"),
@@ -113,6 +121,8 @@ def run(
         config.network.port = port
     if poll_interval is not None:
         config.poll_interval = poll_interval
+    if scanraw_fast_read is not None:
+        config.scanraw_fast_read = scanraw_fast_read
 
     NetworkConfig.model_validate(config.network.__dict__)
 
