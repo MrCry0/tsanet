@@ -83,6 +83,17 @@
   `trace calc`, `trace unit`, `trace stats`) echoed a Typer enum argument
   directly in an f-string, printing its Python repr (e.g. `lna =
   LnaMode.on`) instead of the plain value (`lna = on`).
+- **Hub crashed its request loop with an "unhandled error" when a
+  controller disconnected abruptly** (process killed, network dropped)
+  instead of closing cleanly: the OS reports an abrupt disconnect as
+  `ConnectionResetError`/`BrokenPipeError` raised directly from
+  `socket.recv()`/`sendall()`, not the empty read a clean close produces,
+  so it was never converted to the `ConnectionClosed` the request loop
+  already knew how to handle quietly. `protocol/transport.py`'s
+  `Connection.send()`/`recv()` now normalize any `OSError` from the
+  underlying socket to `ConnectionClosed`, so every caller sees one
+  consistent "the peer is gone" signal regardless of how the OS reported
+  it.
 
 ### Removed
 

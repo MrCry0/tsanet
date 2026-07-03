@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import socket
+import struct
 import threading
 
 import pytest
@@ -78,6 +80,62 @@ def test_recv_raises_when_peer_closes(bind_endpoint):
             client.recv()
         client.close()
         worker.join(timeout=5)
+    finally:
+        listener.close()
+
+
+def test_recv_raises_connection_closed_on_abrupt_reset(bind_endpoint):
+    """A peer that vanishes abruptly (crash, kill -9, network drop) sends a
+    TCP RST instead of a clean FIN: recv() raises ConnectionResetError
+    directly rather than returning b"". This must still surface as the same
+    ConnectionClosed callers already handle, not an unhandled OSError.
+
+    SO_LINGER with a zero timeout forces the OS to send a real RST on
+    close(), reproducing the reported bug exactly rather than simulating it.
+    """
+    if bind_endpoint.transport != TCP:
+        pytest.skip("SO_LINGER-forced RST is a TCP-specific technique")
+
+    listener = listen(bind_endpoint)
+
+    def serve():
+        conn = listener.accept()
+        conn._sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+        conn._sock.close()
+
+    worker = threading.Thread(target=serve)
+    worker.start()
+    try:
+        client = dial(_dial_endpoint(listener, bind_endpoint))
+        worker.join(timeout=5)
+        with pytest.raises(ConnectionClosed):
+            client.recv()
+        client.close()
+    finally:
+        listener.close()
+
+
+def test_send_raises_connection_closed_when_peer_is_gone(bind_endpoint):
+    """sendall() to a dead peer raises BrokenPipeError/ConnectionResetError
+    (an OSError) directly; this must normalize to ConnectionClosed too, so
+    callers only need to handle one "the peer is gone" exception."""
+    listener = listen(bind_endpoint)
+
+    def serve():
+        conn = listener.accept()
+        conn.close()
+
+    worker = threading.Thread(target=serve)
+    worker.start()
+    try:
+        client = dial(_dial_endpoint(listener, bind_endpoint))
+        worker.join(timeout=5)
+        # The peer's close() may not be observed until we actually try to
+        # use the socket; send repeatedly until the OS reports it as dead.
+        with pytest.raises(ConnectionClosed):
+            for _ in range(50):
+                client.send(Request(id=1, domain="session", op="status"))
+        client.close()
     finally:
         listener.close()
 

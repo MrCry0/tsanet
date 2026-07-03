@@ -143,10 +143,13 @@ class HubServer:
             self._auto_select_device()
             logger.debug("device auto-select complete")
         except SessionBusy as exc:
-            connection.send(Response(id=0, status=Status.ERROR, error=str(exc)))
+            try:
+                connection.send(Response(id=0, status=Status.ERROR, error=str(exc)))
+            except ConnectionClosed:
+                pass
             connection.close()
             return
-        except OSError:
+        except (OSError, ConnectionClosed):
             connection.close()
             return
 
