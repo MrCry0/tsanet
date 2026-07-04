@@ -288,8 +288,15 @@ security:
   token: null
 ```
 
-[Example configuration files](examples/) with token authentication are
-included in the repository.
+The hub additionally has a field the controller doesn't:
+`poll_interval` (device hotplug rescan interval). See the full reference
+docs for every field, its default, valid values, and CLI-flag equivalent:
+
+- [Hub configuration reference](docs/hub-config.md)
+- [Controller configuration reference](docs/controller-config.md)
+
+[Example configuration files](examples/) with token authentication and
+every field annotated are included in the repository.
 
 ## Development
 

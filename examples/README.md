@@ -1,9 +1,11 @@
 # Example configs
 
 - `hub.yaml` - hub listening on `127.0.0.1:8888` over TCP, with shared-secret
-  token authentication.
+  token authentication. Every field the hub understands is shown with an
+  inline comment; full reference: [`../docs/hub-config.md`](../docs/hub-config.md).
 - `controller.yaml` - controller dialing the same address/port, with the
-  matching token.
+  matching token. Every field is shown with an inline comment; full
+  reference: [`../docs/controller-config.md`](../docs/controller-config.md).
 - `apply_ctl_settings.sh` - sets the sweep range to 2.4-2.49 GHz at 180
   points, and enables traces 1-3 with calc minh/maxh/aver4, against the
   hub described by `controller.yaml`.
