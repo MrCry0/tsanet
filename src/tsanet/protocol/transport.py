@@ -54,6 +54,12 @@ class Connection:
         try:
             with self._send_lock:
                 self._sock.sendall(frame)
+        except TimeoutError:
+            # A timeout means the OS-level send timed out, not that the
+            # peer is gone -- callers (e.g. RpcClient) may have their own
+            # retry/backoff handling for it. Let it propagate unchanged;
+            # only fold real disconnect signals into ConnectionClosed below.
+            raise
         except OSError as exc:
             # A dead peer surfaces here as BrokenPipeError/ConnectionResetError
             # (an abrupt disconnect, e.g. the process was killed or the
@@ -73,6 +79,15 @@ class Connection:
         while remaining > 0:
             try:
                 chunk = self._sock.recv(remaining)
+            except TimeoutError:
+                # A read timeout (e.g. RpcClient's 3s sock.settimeout(), used
+                # to periodically wake the reader loop) is not a disconnect
+                # signal -- it just means no data arrived in time. Callers
+                # that set a timeout already have their own retry handling
+                # for it (see RpcClient._reader_loop's "except socket.timeout:
+                # continue"); converting it to ConnectionClosed here would
+                # tear down a perfectly healthy, merely idle connection.
+                raise
             except OSError as exc:
                 # Same normalization as send(): an abrupt disconnect (TCP
                 # RST) raises ConnectionResetError/OSError directly instead

@@ -15,6 +15,17 @@
   underlying socket to `ConnectionClosed`, so every caller sees one
   consistent "the peer is gone" signal regardless of how the OS reported
   it.
+- **GUI streaming crashed with "connection lost: timed out" during any
+  idle gap longer than 3 seconds**: the fix above was too broad.
+  `RpcClient` deliberately sets a receive timeout
+  (`rpc_client.py`'s `sock.settimeout(_RECV_TIMEOUT)`) so its reader
+  thread can wake up periodically while idle, and its own `except
+  socket.timeout: continue` already treated that as routine -- but
+  `TimeoutError` is itself an `OSError` subclass, so it was being folded
+  into `ConnectionClosed` before ever reaching that handler, tearing down
+  a perfectly healthy, merely idle connection. `send()`/`recv()` now
+  re-raise `TimeoutError` unchanged and only normalize other `OSError`
+  subtypes (a real disconnect) to `ConnectionClosed`.
 
 ## [1.0.0] — 2026-07-03
 
