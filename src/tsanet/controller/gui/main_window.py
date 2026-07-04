@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
 
         handler = _LogHandler(bridge)
         handler.setFormatter(
-            logging.Formatter("%(asctime)s [%(levelname)-5s] %(name)s: %(message)s", "%H:%M:%S")
+            logging.Formatter("%(asctime)s [%(levelname)-7s] %(name)s: %(message)s", "%H:%M:%S")
         )
         handler.setLevel(logging.INFO)
         logging.getLogger("tsanet").addHandler(handler)
