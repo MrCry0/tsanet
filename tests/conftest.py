@@ -21,10 +21,17 @@ def pytest_addoption(parser):
         default=False,
         help="run tests that need a real tinySA device (auto-detected by default)",
     )
+    parser.addoption(
+        "--run-integration",
+        action="store_true",
+        default=False,
+        help="run end-to-end tests that spin up a real hub/GUI over a real socket",
+    )
 
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "hardware: requires a real tinySA device")
+    config.addinivalue_line("markers", "integration: spins up a real hub/GUI over a real socket")
 
 
 def _has_tinysa():
@@ -67,11 +74,16 @@ def _hardware_available():
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--run-hardware"):
-        return
-    if _hardware_available():
-        return
-    skip = pytest.mark.skip(reason="no tinySA detected; pass --run-hardware to force")
+    skip_hardware = None
+    if not config.getoption("--run-hardware") and not _hardware_available():
+        skip_hardware = pytest.mark.skip(reason="no tinySA detected; pass --run-hardware to force")
+
+    skip_integration = None
+    if not config.getoption("--run-integration"):
+        skip_integration = pytest.mark.skip(reason="pass --run-integration to run this")
+
     for item in items:
-        if item.get_closest_marker("hardware"):
-            item.add_marker(skip)
+        if skip_hardware is not None and item.get_closest_marker("hardware"):
+            item.add_marker(skip_hardware)
+        if skip_integration is not None and item.get_closest_marker("integration"):
+            item.add_marker(skip_integration)

@@ -328,6 +328,18 @@ without activating the virtualenv.
 uv run pytest tests/test_hardware.py --run-hardware
 ```
 
+### Integration tests
+
+```sh
+uv run --extra gui pytest tests/test_gui_hub_integration.py --run-integration
+```
+
+Wires a real `MainWindow` to a real `HubServer` over an actual loopback
+socket (no tinySA needed). Not run by default alongside the rest of the
+suite -- real sockets, threads, and a real Qt event loop are slower and
+more failure-prone than the fake-RPC GUI tests and direct-dispatch hub
+tests that cover the same code otherwise.
+
 The `dev` dependency group (pytest, ruff, twine) is installed automatically
 by `uv sync`. The `gui` extra pulls in `PySide6` and `pyqtgraph`; omit it
 for a headless test run.
