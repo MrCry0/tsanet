@@ -140,6 +140,76 @@ def test_send_raises_connection_closed_when_peer_is_gone(bind_endpoint):
         listener.close()
 
 
+def test_recv_timeout_is_not_mistaken_for_connection_closed(bind_endpoint):
+    """Regression: RpcClient sets a receive timeout (rpc_client.py's
+    sock.settimeout(_RECV_TIMEOUT)) specifically so its reader loop can wake
+    up periodically while idle, and its own "except socket.timeout: continue"
+    already treats that as routine, not a disconnect. TimeoutError is an
+    OSError subclass, so recv() must not fold it into ConnectionClosed --
+    that would tear down a perfectly healthy, merely idle connection on
+    every timeout, exactly as reported against a live GUI session.
+    """
+    listener = listen(bind_endpoint)
+    accepted = threading.Event()
+
+    def serve():
+        conn = listener.accept()
+        accepted.set()
+        # Hold the connection open and silent -- never send anything -- so
+        # the client's recv() has nothing to read and must time out.
+        threading.Event().wait(2.0)
+        conn.close()
+
+    worker = threading.Thread(target=serve, daemon=True)
+    worker.start()
+    try:
+        client = dial(_dial_endpoint(listener, bind_endpoint))
+        assert accepted.wait(timeout=5)
+        client._sock.settimeout(0.05)
+
+        with pytest.raises(TimeoutError):
+            client.recv()
+
+        client.close()
+    finally:
+        listener.close()
+
+
+def test_send_timeout_is_not_mistaken_for_connection_closed(bind_endpoint):
+    """Same normalization gap as recv(), for the write side.
+
+    Shrinks the accepted socket's receive buffer and never reads from it, so
+    the client's sendall() of an oversized payload reliably blocks until its
+    own short timeout fires, rather than depending on OS buffering luck.
+    """
+    listener = listen(bind_endpoint)
+    accepted = threading.Event()
+
+    def serve():
+        conn = listener.accept()
+        conn._sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024)
+        accepted.set()
+        threading.Event().wait(2.0)  # never read -- let the client's buffer fill
+        conn.close()
+
+    worker = threading.Thread(target=serve, daemon=True)
+    worker.start()
+    try:
+        client = dial(_dial_endpoint(listener, bind_endpoint))
+        assert accepted.wait(timeout=5)
+        client._sock.settimeout(0.2)
+
+        big_request = Request(
+            id=1, domain="session", op="status", args={"padding": "x" * 5_000_000}
+        )
+        with pytest.raises(TimeoutError):
+            client.send(big_request)
+
+        client.close()
+    finally:
+        listener.close()
+
+
 def test_tcp_endpoint_requires_port():
     with pytest.raises(ValueError):
         Endpoint(TCP, "127.0.0.1")

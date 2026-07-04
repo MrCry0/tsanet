@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hub crashed its request loop with an "unhandled error" when a
+  controller disconnected abruptly** (process killed, network dropped)
+  instead of closing cleanly: the OS reports an abrupt disconnect as
+  `ConnectionResetError`/`BrokenPipeError` raised directly from
+  `socket.recv()`/`sendall()`, not the empty read a clean close produces,
+  so it was never converted to the `ConnectionClosed` the request loop
+  already knew how to handle quietly. `protocol/transport.py`'s
+  `Connection.send()`/`recv()` now normalize any `OSError` from the
+  underlying socket to `ConnectionClosed`, so every caller sees one
+  consistent "the peer is gone" signal regardless of how the OS reported
+  it.
+- **GUI streaming crashed with "connection lost: timed out" during any
+  idle gap longer than 3 seconds**: the fix above was too broad.
+  `RpcClient` deliberately sets a receive timeout
+  (`rpc_client.py`'s `sock.settimeout(_RECV_TIMEOUT)`) so its reader
+  thread can wake up periodically while idle, and its own `except
+  socket.timeout: continue` already treated that as routine -- but
+  `TimeoutError` is itself an `OSError` subclass, so it was being folded
+  into `ConnectionClosed` before ever reaching that handler, tearing down
+  a perfectly healthy, merely idle connection. `send()`/`recv()` now
+  re-raise `TimeoutError` unchanged and only normalize other `OSError`
+  subtypes (a real disconnect) to `ConnectionClosed`.
+
 ### Added
 
 - **Attenuator, RBW, and trigger mode control**: end-to-end from the device
